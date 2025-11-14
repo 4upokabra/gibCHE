@@ -1,0 +1,7 @@
+__pycache__/
+run.py
+venv/
+.env
+.gitignore
+.git/
+git/
