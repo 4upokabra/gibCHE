@@ -17,7 +17,7 @@ async def main() -> None:
     pipeline = LLMScannerPipeline()
     try:
         report = await pipeline.run(
-            url="http://testphp.vulnweb.com/",
+            url="http://62.173.140.174:16093/",
             scan_goal=(
                 "Комплексный аудит безопасности: ищи OWASP Top 10, инъекции, "
                 "уязвимости конфигурации, слабые заголовки, утечки данных, "
@@ -35,6 +35,14 @@ async def main() -> None:
         print(f"- {finding.severity.upper()}: {finding.title}")
         if finding.description:
             print(f"  {finding.description}")
+        if finding.cwe_ids:
+            print(f"  CWE: {', '.join(finding.cwe_ids)}")
+        if finding.cve_ids:
+            print(f"  CVE: {', '.join(finding.cve_ids)}")
+        if finding.bdu_ids:
+            print(f"  БДУ ФСТЭК: {', '.join(finding.bdu_ids)}")
+        if finding.threat_ids:
+            print(f"  Угрозы (УБИ): {', '.join(finding.threat_ids)}")
         if finding.recommendations:
             print("  Recommendations:")
             for rec in finding.recommendations:

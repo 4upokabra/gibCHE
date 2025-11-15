@@ -63,6 +63,7 @@ def _build_finding(item: Dict[str, Any]) -> ScanFinding:
         cwe_ids=_as_list(item.get("cwe_ids")),
         cve_ids=_as_list(item.get("cve_ids")),
         bdu_ids=_as_list(item.get("bdu_ids")),
+        threat_ids=_as_list(item.get("threat_ids")),
         likelihood=item.get("likelihood"),
         impact=item.get("impact"),
     )

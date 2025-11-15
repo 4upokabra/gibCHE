@@ -23,6 +23,7 @@ RESPONSE_SCHEMA = """{
       "cwe_ids": ["CWE-XXX"],
       "cve_ids": ["CVE-YYYY-NNNN"],
       "bdu_ids": ["БДУ.СМ.ММ-XXX"],
+      "threat_ids": ["УБИ.XXXX"],
       "likelihood": "low|medium|high",
       "impact": "low|medium|high"
     }

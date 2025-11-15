@@ -85,6 +85,7 @@ class ScanFinding:
     cwe_ids: List[str] = field(default_factory=list)
     cve_ids: List[str] = field(default_factory=list)
     bdu_ids: List[str] = field(default_factory=list)
+    threat_ids: List[str] = field(default_factory=list)
     likelihood: Optional[str] = None
     impact: Optional[str] = None
 
