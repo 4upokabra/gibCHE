@@ -63,6 +63,14 @@ export default function App() {
     target: "scanme.nmap.org",
     targetType: "ip",
     comprehensive: true,
+    scanners: {
+      nmap: true,
+      shodan: true,
+      virustotal: true,
+    },
+    nmapArgs: "-sC -sV",
+    shodanQuery: "ssl:true org:\"Example Corp\"",
+    virustotalFlags: "--include-malware --historical",
   });
   const [attackForm, setAttackForm] = useState<AttackFormState>({
     target: "10.10.10.10",
@@ -148,6 +156,12 @@ export default function App() {
         target: reconForm.target,
         target_type: reconForm.targetType,
         comprehensive: reconForm.comprehensive,
+        scanners: reconForm.scanners,
+        overrides: {
+          nmap_args: reconForm.nmapArgs,
+          shodan_query: reconForm.shodanQuery,
+          virustotal_flags: reconForm.virustotalFlags,
+        },
       };
       await apiFetch(
         reconForm.comprehensive ? "/intelligence/comprehensive" : "/intelligence/basic",
@@ -310,7 +324,7 @@ export default function App() {
                   },
                 ].map((stat) => (
                   <article key={stat.label} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{stat.label}</p>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">{stat.label}</p>
                     <p className="mt-2 text-2xl font-semibold text-white">{stat.value}</p>
                   </article>
                 ))}

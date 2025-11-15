@@ -3,11 +3,13 @@ import * as Tabs from "@radix-ui/react-tabs";
 import clsx from "clsx";
 import {
   BookOpen,
+  Database,
   Loader2,
   MapPin,
   Radar,
   Radio,
   Shield,
+  Shuffle,
   SlidersHorizontal,
   Sparkles,
   Target,
@@ -62,6 +64,11 @@ export function CommandHub({
   const isBruteforce = attackForm.attackType === "bruteforce";
   const isMetasploit = attackForm.attackType === "metasploit";
   const isSQLi = attackForm.attackType === "sqli";
+  const scannerOptions = [
+    { key: "nmap", label: "Nmap", description: "Активное сканирование", icon: Radar },
+    { key: "shodan", label: "Shodan", description: "Поиск по сети", icon: Shuffle },
+    { key: "virustotal", label: "VirusTotal", description: "IOC / файлы", icon: Database },
+  ] as const;
 
   return (
     <section className="shimmer-border surface p-8">
@@ -150,6 +157,76 @@ export function CommandHub({
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
               Маршруты Nmap, Shodan и VirusTotal будут связаны с отчётом, статусы появятся в истории и JSON.
             </div>
+          </div>
+
+          <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-400">
+              <Radar className="h-4 w-4 text-primary" />
+              Сканеры и параметры
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {scannerOptions.map((scanner) => {
+                const enabled = reconForm.scanners[scanner.key];
+                const Icon = scanner.icon;
+                return (
+                  <button
+                    key={scanner.key}
+                    type="button"
+                    onClick={() =>
+                      setReconForm((prev) => ({
+                        ...prev,
+                        scanners: { ...prev.scanners, [scanner.key]: !prev.scanners[scanner.key] },
+                      }))
+                    }
+                    className={clsx(
+                      "flex flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition",
+                      enabled
+                        ? "border-primary/50 bg-primary/10 text-white"
+                        : "border-white/10 bg-white/5 text-slate-400 hover:border-white/30",
+                    )}
+                  >
+                    <Icon className={clsx("h-4 w-4", enabled ? "text-primary" : "text-slate-500")} />
+                    <span className="text-sm font-semibold">{scanner.label}</span>
+                    <span className="text-[11px] uppercase tracking-[0.3em]">{scanner.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <label className="block space-y-2">
+                <span className={labelClass}>Nmap аргументы</span>
+                <textarea
+                  className={textareaClass}
+                  rows={3}
+                  value={reconForm.nmapArgs}
+                  onChange={(e) => setReconForm((prev) => ({ ...prev, nmapArgs: e.target.value }))}
+                  placeholder="-sC -sV -Pn --top-ports=100"
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className={labelClass}>Shodan dork</span>
+                <textarea
+                  className={textareaClass}
+                  rows={3}
+                  value={reconForm.shodanQuery}
+                  onChange={(e) => setReconForm((prev) => ({ ...prev, shodanQuery: e.target.value }))}
+                  placeholder='ssl:true http.title:"vpn" city:"moscow"'
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className={labelClass}>VirusTotal фильтры</span>
+                <textarea
+                  className={textareaClass}
+                  rows={3}
+                  value={reconForm.virustotalFlags}
+                  onChange={(e) => setReconForm((prev) => ({ ...prev, virustotalFlags: e.target.value }))}
+                  placeholder="--include-malware --historical"
+                />
+              </label>
+            </div>
+            <p className="text-xs text-slate-500">
+              Можно отключить лишние источники и тонко настроить запросы – параметры попадут в backend вместе с задачей.
+            </p>
           </div>
 
           <button onClick={onRecon} disabled={pendingAction === "recon"} className={actionButtonClass}>

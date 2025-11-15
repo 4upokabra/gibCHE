@@ -114,10 +114,10 @@ export function HistoryPanel({
                 <span
                   className={clsx(
                     "rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize",
-                    STATUS_COLORS[item.status ?? ""] ?? "bg-white/10 text-slate-200",
+                    STATUS_COLORS[item.status ?? "completed"] ?? "bg-white/10 text-slate-200",
                   )}
                 >
-                  {item.status ?? "unknown"}
+                  {item.status ?? "completed"}
                 </span>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3">

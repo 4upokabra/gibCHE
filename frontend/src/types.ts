@@ -4,6 +4,14 @@ export type ReconFormState = {
   target: string;
   targetType: "ip" | "domain" | "network";
   comprehensive: boolean;
+  scanners: {
+    nmap: boolean;
+    shodan: boolean;
+    virustotal: boolean;
+  };
+  nmapArgs: string;
+  shodanQuery: string;
+  virustotalFlags: string;
 };
 
 export type AttackFormState = {

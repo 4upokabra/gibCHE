@@ -6,6 +6,7 @@ from dataclasses import asdict
 from datetime import datetime
 from enum import Enum
 from functools import partial
+import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import (
@@ -131,15 +132,19 @@ results_store: Dict[str, Dict[str, Any]] = {}
 llm_reports: Dict[str, Dict[str, Any]] = {}
 
 
+def _resolve_api_key(record: Optional[Any], env_var: str) -> Optional[str]:
+    return os.getenv(env_var) or (record.api_key if record else None)
+
+
 async def get_shodan_client(db: AsyncSession) -> ShodanClient:
     api_key_record = await crud.get_api_key(db, "shodan")
-    api_key = api_key_record.api_key if api_key_record else None
+    api_key = _resolve_api_key(api_key_record, "SHODAN_API_KEY")
     return ShodanClient(api_key)
 
 
 async def get_virustotal_client(db: AsyncSession) -> VirusTotalClient:
     api_key_record = await crud.get_api_key(db, "virustotal")
-    api_key = api_key_record.api_key if api_key_record else None
+    api_key = _resolve_api_key(api_key_record, "VIRUSTOTAL_API_KEY")
     return VirusTotalClient(api_key)
 
 

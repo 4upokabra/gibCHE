@@ -9,7 +9,7 @@ export function ToastStack({ toastList }: ToastStackProps) {
   if (toastList.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-0 flex items-start justify-end px-4 py-6">
+    <div className="pointer-events-none fixed inset-0 z-[60] flex items-start justify-end px-4 py-6">
       <div className="flex flex-col gap-3">
         {toastList.map((toast) => (
           <div
