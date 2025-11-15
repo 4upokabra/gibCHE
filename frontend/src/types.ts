@@ -13,6 +13,13 @@ export type AttackFormState = {
   dry_run: boolean;
   service: string;
   port: number;
+  dictionary: string;
+  usernames: string;
+  concurrency: number;
+  metasploitModule: string;
+  metasploitPayload: string;
+  metasploitOptions: string;
+  sqlmapFlags: string;
 };
 
 export type LlmFormState = {

