@@ -1,0 +1,15 @@
+{
+  "target": "http://testphp.vulnweb.com/listproducts.php?cat=1",
+  "vector": "sqli",
+  "status": "dry_run",
+  "success": true,
+  "details": "sqlmap не запускался (dry-run или бинарь отсутствует).",
+  "artifacts": {
+    "command": "C:\\Users\\maybe\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\sqlmap.EXE -u http://testphp.vulnweb.com/listproducts.php?cat=1 --batch --level=3 --risk=2 --random-agent --header User-Agent: ReconScope"
+  },
+  "evidence": {},
+  "profile": "grey_box",
+  "dry_run": true,
+  "sla": null,
+  "matched_vulns": []
+}
