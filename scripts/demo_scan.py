@@ -48,6 +48,19 @@ async def main() -> None:
             for rec in finding.recommendations:
                 print(f"    * {rec}")
 
+    if report.action_summary:
+        print("\n=== LLM ACTION SUMMARY ===")
+        if report.action_summary.changes:
+            print(f"Изменения и наблюдения: {report.action_summary.changes}")
+        if report.action_summary.defensive_actions:
+            print("Рекомендации по защите:")
+            for action in report.action_summary.defensive_actions:
+                print(f"  - {action}")
+        if report.action_summary.offensive_actions:
+            print("Возможные шаги атаки:")
+            for action in report.action_summary.offensive_actions:
+                print(f"  - {action}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

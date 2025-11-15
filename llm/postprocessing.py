@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
-from .models import RawLLMResponse, ScanFinding, ScanReport
+from .models import ActionSummary, RawLLMResponse, ScanFinding, ScanReport
 
 SEVERITY_ORDER = {"critical", "high", "medium", "low", "info"}
 
@@ -66,6 +66,18 @@ def _build_finding(item: Dict[str, Any]) -> ScanFinding:
         threat_ids=_as_list(item.get("threat_ids")),
         likelihood=item.get("likelihood"),
         impact=item.get("impact"),
+    )
+
+
+def build_action_summary(raw_response: RawLLMResponse) -> ActionSummary:
+    payload = _extract_payload(raw_response)
+    changes = payload.get("changes", "").strip()
+    defensive_actions = _as_list(payload.get("defensive_actions"))
+    offensive_actions = _as_list(payload.get("offensive_actions"))
+    return ActionSummary(
+        changes=changes,
+        defensive_actions=defensive_actions,
+        offensive_actions=offensive_actions,
     )
 
 

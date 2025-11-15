@@ -91,6 +91,13 @@ class ScanFinding:
 
 
 @dataclass(slots=True)
+class ActionSummary:
+    changes: str
+    defensive_actions: List[str]
+    offensive_actions: List[str]
+
+
+@dataclass(slots=True)
 class ScanReport:
     url: str
     fetched_at: datetime
@@ -98,5 +105,6 @@ class ScanReport:
     findings: List[ScanFinding]
     raw_response: RawLLMResponse
     metadata: Dict[str, Any] = field(default_factory=dict)
+    action_summary: Optional[ActionSummary] = None
 
 

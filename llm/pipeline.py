@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
@@ -10,7 +11,7 @@ from bs4 import BeautifulSoup
 
 from .enrichment import ThreatKnowledgeBase, enrich_report
 from .fetchers import AsyncFetcher, FetchError, PlaywrightFetcher, RequestsFetcher
-from .llm_client import OpenRouterClient
+from .llm_client import LLMClientError, OpenRouterClient
 from .models import (
     LLMRequest,
     ModelProvider,
@@ -21,9 +22,9 @@ from .models import (
     StructuredPage,
     StructuredSection,
 )
-from .postprocessing import build_scan_report
+from .postprocessing import PostProcessingError, build_action_summary, build_scan_report
 from .processing import ProcessingOptions, build_structured_page
-from .prompts import build_scan_messages
+from .prompts import build_action_summary_messages, build_scan_messages
 
 
 @dataclass(slots=True)
@@ -44,6 +45,7 @@ class ScanOptions:
     use_browser: bool = False
     crawl: CrawlOptions = field(default_factory=CrawlOptions)
     processing: ProcessingOptions = field(default_factory=ProcessingOptions)
+    generate_action_summary: bool = True
 
 
 class LLMScannerPipeline:
@@ -58,6 +60,7 @@ class LLMScannerPipeline:
         self.browser_fetcher = browser_fetcher or PlaywrightFetcher()
         self.llm_client = llm_client or OpenRouterClient()
         self.knowledge_base = knowledge_base or ThreatKnowledgeBase()
+        self.logger = logging.getLogger(__name__)
 
     async def run(
         self,
@@ -104,7 +107,14 @@ class LLMScannerPipeline:
             url=page_contents[0].url if page_contents else url,
             metadata=aggregated_page.metadata,
         )
-        return enrich_report(report, self.knowledge_base)
+        report = enrich_report(report, self.knowledge_base)
+
+        if options.generate_action_summary:
+            action_summary = await self._generate_action_summary(report, options)
+            if action_summary:
+                report.action_summary = action_summary
+
+        return report
 
     async def aclose(self) -> None:
         await self.http_fetcher.aclose()
@@ -176,6 +186,27 @@ class LLMScannerPipeline:
             raise FetchError(f"Не удалось загрузить страницу {start_url}")
 
         return results, depth_map
+
+    async def _generate_action_summary(
+        self,
+        report: ScanReport,
+        options: ScanOptions,
+    ):
+        try:
+            messages = build_action_summary_messages(report)
+            request = LLMRequest(
+                provider=options.provider,  # type: ignore[arg-type]
+                model=options.model,
+                messages=messages,
+                temperature=max(options.temperature, 0.1),
+                max_output_tokens=min(options.max_output_tokens, 1024),
+                response_format="json",
+            )
+            raw_response = await self.llm_client.complete(request)
+            return build_action_summary(raw_response)
+        except (LLMClientError, PostProcessingError, Exception) as exc:  # noqa: BLE001
+            self.logger.warning("Failed to build action summary: %s", exc)
+            return None
 
 
 NON_HTML_EXTENSIONS = {

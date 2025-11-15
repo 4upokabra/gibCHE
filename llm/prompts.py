@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import List
 
-from .models import LLMMessage, PromptContext, StructuredSection
+from .models import (
+    LLMMessage,
+    PromptContext,
+    ScanReport,
+    StructuredSection,
+)
 
 SYSTEM_PROMPT = (
     "Ты — эксперт по безопасности веб-приложений. "
@@ -33,6 +38,13 @@ RESPONSE_SCHEMA = """{
 }"""
 
 
+ACTION_SUMMARY_SCHEMA = """{
+  "changes": "string",
+  "defensive_actions": ["string"],
+  "offensive_actions": ["string"]
+}"""
+
+
 def build_scan_messages(
     context: PromptContext,
     max_sections: int = 12,
@@ -52,6 +64,54 @@ def build_scan_messages(
 
     return [
         LLMMessage(role="system", content=SYSTEM_PROMPT),
+        LLMMessage(role="user", content=user_prompt),
+    ]
+
+
+def build_action_summary_messages(
+    report: ScanReport,
+    max_findings: int = 12,
+) -> List[LLMMessage]:
+    findings_lines: List[str] = []
+    for finding in report.findings[:max_findings]:
+        parts = [
+            f"Заголовок: {finding.title}",
+            f"Уровень: {finding.severity}",
+            f"Описание: {finding.description}",
+        ]
+        if finding.recommendations:
+            parts.append(
+                "Рекомендации: "
+                + "; ".join(rec for rec in finding.recommendations[:5])
+            )
+        if finding.cwe_ids:
+            parts.append(f"CWE: {', '.join(finding.cwe_ids)}")
+        if finding.cve_ids:
+            parts.append(f"CVE: {', '.join(finding.cve_ids)}")
+        if finding.bdu_ids:
+            parts.append(f"БДУ: {', '.join(finding.bdu_ids)}")
+        if finding.threat_ids:
+            parts.append(f"УБИ: {', '.join(finding.threat_ids)}")
+        findings_lines.append("\n".join(parts))
+
+    user_prompt = (
+        "Проанализируй итоги сканирования и сформируй краткое резюме изменений, "
+        "а также списки приоритетных шагов защиты и возможных шагов атаки "
+        "для команды Red Team. Ответ строго в формате JSON:\n"
+        f"{ACTION_SUMMARY_SCHEMA}\n\n"
+        f"Общие выводы сканирования:\n{report.summary}\n\n"
+        "Детали находок:\n"
+        + "\n\n".join(findings_lines)
+    )
+
+    return [
+        LLMMessage(
+            role="system",
+            content=(
+                "Ты — аналитик кибербезопасности. Подготовь exec-summary для CISO, "
+                "разделив рекомендации по защите и потенциальные сценарии атаки."
+            ),
+        ),
         LLMMessage(role="user", content=user_prompt),
     ]
 
