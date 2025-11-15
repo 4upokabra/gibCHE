@@ -6,6 +6,7 @@ from src.core.contracts import IntelligenceProvider
 from datetime import datetime
 from typing import Dict, Any, List
 import ipaddress
+import asyncio
 
 class EnhancedPassiveRecon(IntelligenceProvider):
     """Улучшенный пассивный сбор данных с валидацией"""
@@ -45,7 +46,7 @@ class EnhancedPassiveRecon(IntelligenceProvider):
         # Базовый сбор для всех типов целей
         if target_type in ["ip", "domain"]:
             # Nmap быстрый сканинг
-            nmap_result = self.nmap.quick_scan(target)
+            nmap_result = self._run_async(self.nmap.quick_scan(target))
             if "error" not in nmap_result:
                 results["network_scan"] = nmap_result
         
@@ -89,7 +90,7 @@ class EnhancedPassiveRecon(IntelligenceProvider):
             results["virustotal"] = vt_result
         
         # DNS информация через nmap
-        dns_scan = self.nmap.scan_target(domain, "-sn --dns-servers 8.8.8.8")
+        dns_scan = self._run_async(self.nmap.scan_target(domain, "-sn --dns-servers 8.8.8.8"))
         if "error" not in dns_scan:
             results["dns_info"] = dns_scan
         
@@ -100,7 +101,7 @@ class EnhancedPassiveRecon(IntelligenceProvider):
         results = {}
         
         # Обнаружение хостов в сети
-        network_scan = self.nmap.scan_target(network, "-sn")
+        network_scan = self._run_async(self.nmap.scan_target(network, "-sn"))
         if "error" not in network_scan:
             results["network_discovery"] = network_scan
         
@@ -116,3 +117,7 @@ class EnhancedPassiveRecon(IntelligenceProvider):
             source=self.provider_name,
             data=intelligence
         )
+
+    def _run_async(self, coro):
+        """Выполняет асинхронный вызов nmap в синхронном контексте."""
+        return asyncio.run(coro)

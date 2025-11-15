@@ -1,8 +1,12 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
+  font-family: "Inter", "Space Grotesk", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   color-scheme: dark;
-  background-color: #020617;
 }
 
 * {
@@ -11,10 +15,8 @@
 
 body {
   margin: 0;
-  font-family: "Inter", system-ui, sans-serif;
   min-height: 100vh;
-  background: radial-gradient(circle at top, rgba(124, 58, 237, 0.25), transparent 55%),
-    #020617;
+  background-color: #020617;
   color: #e2e8f0;
 }
 
@@ -22,10 +24,58 @@ body {
   min-height: 100vh;
 }
 
-.glass {
-  background: rgba(15, 23, 42, 0.75);
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(16px);
+.hero-gradient {
+  background: radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.35), transparent 45%),
+    radial-gradient(circle at 80% 0%, rgba(14, 165, 233, 0.25), transparent 35%),
+    #030617;
 }
 
+.surface {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.9));
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  box-shadow: 0 20px 70px rgba(2, 6, 23, 0.8);
+  backdrop-filter: blur(30px);
+}
+
+.shimmer-border {
+  position: relative;
+  border-radius: 32px;
+}
+
+.shimmer-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(120deg, rgba(124, 58, 237, 0.4), rgba(14, 165, 233, 0.4));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.grid-overlay {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 60px 60px;
+  opacity: 0.25;
+}
+
+.chip {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 0.35rem 0.95rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+.blur-blob {
+  filter: blur(80px);
+  opacity: 0.35;
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.4);
+  color: #020617;
+}

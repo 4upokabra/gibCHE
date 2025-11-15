@@ -67,3 +67,55 @@
 5. Собрать атаки (брутфорс, SQLi, эксплойты) под три модели тестирования.
 6. Сделать визуализацию результатов и демо-флоу для жюри.
 
+## Запуск через Docker
+
+### Предварительные требования
+
+- Docker 24+ и docker compose v2.
+- Свободные порты: `4173` (фронтенд), `8000` (API), `5432` (PostgreSQL).
+- (Опционально) переменные окружения с ключами `SHODAN_API_KEY`, `VIRUSTOTAL_API_KEY`, `OPENROUTER_API_KEY`, `MSFRPC_*`.
+
+### Сборка и запуск
+
+```bash
+cd /root/workflow/git/gibCHE
+docker compose up --build
+```
+
+Команда создаст три сервиса:
+
+- `db` — PostgreSQL 15 с базой `intelligence_db` (порт `5432` проброшен наружу).
+- `backend` — FastAPI + атакующий движок, порт `8000`.
+- `frontend` — собранный Vite/React, доступен по адресу http://localhost:4173. Все запросы к `/api/*` автоматически проксируются в backend.
+
+Для передачи секретов достаточно экспортировать их перед запуском или создать файл `.env` в корне репозитория:
+
+```env
+SHODAN_API_KEY=xxx
+VIRUSTOTAL_API_KEY=yyy
+OPENROUTER_API_KEY=zzz
+# Пароль доступа к веб-интерфейсу
+VITE_ACCESS_PASS=мой_секрет
+# При наличии Metasploit RPC:
+MSFRPC_URL=http://metasploit:55553/api/
+MSFRPC_TOKEN=token
+```
+
+### Полезные команды
+
+- Просмотр логов: `docker compose logs -f backend` или `frontend`.
+- Горячая перезагрузка бэкенда после изменения кода: `docker compose build backend && docker compose up -d backend`.
+- Выполнение миграций/утилит внутри контейнера: `docker compose exec backend bash`.
+- Резервные копии и артефакты атак сохраняются в директории `./artifacts`, логи — в `./logs`, база данных — в именованном томе `postgres_data`.
+
+### Что входит в образ backend
+
+- Python 3.11 + зависимости из `Autoscan/requirements.txt`.
+- CLI-инструменты `nmap`, `hydra`, `sqlmap` и Playwright (Chromium) для расширенных сценариев.
+- Путь `PYTHONPATH` настроен на `Autoscan` и `llm`, точка входа — `uvicorn src.api.backend_main:app`.
+
+### Настройка фронтенда
+
+- Билд выполняется в `docker/frontend.Dockerfile`, переменная `VITE_API_BASE` по умолчанию равна `/api`. При необходимости можно переопределить её через `VITE_API_BASE=http://example.com/api docker compose build frontend`.
+- Готовый SPA обслуживается nginx (см. `docker/nginx.conf`), поэтому роутинг React работает через `try_files`.
+

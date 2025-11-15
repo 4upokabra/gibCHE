@@ -460,6 +460,16 @@ async def llm_scan(
 ) -> Dict[str, Any]:
     task_id = f"llm_scan_{uuid.uuid4().hex[:8]}"
 
+    results_store[task_id] = {
+        "event_id": task_id,
+        "type": "llm.scan",
+        "status": "processing",
+        "target": request.url,
+        "goal": request.goal,
+        "timestamp": datetime.utcnow().isoformat(),
+        "metadata": request.metadata,
+    }
+
     async def run_llm() -> None:
         try:
             options = ScanOptions(
@@ -481,8 +491,28 @@ async def llm_scan(
                 "metadata": request.metadata,
             }
             llm_reports[task_id] = payload
+            results_store[task_id] = {
+                "event_id": task_id,
+                "type": "llm.scan",
+                "status": "completed",
+                "target": request.url,
+                "goal": request.goal,
+                "timestamp": datetime.utcnow().isoformat(),
+                "report": asdict(report),
+                "metadata": request.metadata,
+            }
         except Exception as exc:  # pragma: no cover
             llm_reports[task_id] = {"report_id": task_id, "status": "failed", "error": str(exc)}
+            results_store[task_id] = {
+                "event_id": task_id,
+                "type": "llm.scan",
+                "status": "failed",
+                "target": request.url,
+                "goal": request.goal,
+                "timestamp": datetime.utcnow().isoformat(),
+                "error": str(exc),
+                "metadata": request.metadata,
+            }
 
     background_tasks.add_task(run_llm)
     return {"task_id": task_id, "status": "processing"}
@@ -498,7 +528,15 @@ async def get_llm_report(report_id: str) -> Dict[str, Any]:
 
 @app.get("/history")
 async def history() -> Dict[str, Any]:
-    return {"count": len(results_store), "items": list(results_store.values())}
+    items = list(results_store.values())
+    items.sort(
+        key=lambda item: item.get("timestamp")
+        or item.get("updated_at")
+        or item.get("created_at")
+        or "",
+        reverse=True,
+    )
+    return {"count": len(items), "items": items}
 
 
 @app.get("/history/{event_id}")

@@ -1,34 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@radix-ui/react-tabs";
-import { Download, Loader2, RefreshCw, ShieldCheck, Zap } from "lucide-react";
-import clsx from "clsx";
+import { ArrowUpRight, Globe, Shield, Sparkles, Zap } from "lucide-react";
+import { CommandHub } from "./components/CommandHub";
+import { SystemPulse } from "./components/SystemPulse";
+import { HistoryPanel } from "./components/HistoryPanel";
+import { DetailDrawer } from "./components/DetailDrawer";
+import { AuthOverlay } from "./components/AuthOverlay";
+import { ToastStack } from "./components/ToastStack";
+import {
+  AttackFormState,
+  FilterState,
+  HealthResponse,
+  HistoryItem,
+  HistoryStats,
+  LlmFormState,
+  PendingAction,
+  ReconFormState,
+  Toast,
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+const ACCESS_PASS = (import.meta.env.VITE_ACCESS_PASS ?? "").trim();
 
-type HistoryItem = {
-  event_id?: string;
-  scan_id?: string;
-  type?: string;
-  status?: string;
-  timestamp?: string;
-  updated_at?: string;
-  data?: unknown;
-  target?: string;
-};
-
-type Toast = {
-  id: string;
-  title: string;
-  description: string;
-  tone: "success" | "error";
-};
-
-const formCard = "glass rounded-2xl p-6 flex flex-col gap-4";
-const labelCls = "text-sm font-medium text-slate-200";
-const inputCls =
-  "mt-1 w-full rounded-lg bg-slate-900/60 border border-slate-700/70 px-3 py-2 text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary";
-const buttonCls =
-  "inline-flex items-center justify-center rounded-xl px-4 py-2 font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50";
+const createId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10);
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -42,86 +36,35 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return await response.json();
 }
 
-const heroGradient =
-  "relative overflow-hidden rounded-3xl glass p-8 border border-slate-700/60 shadow-[0_25px_80px_rgba(124,58,237,0.25)]";
+const formatDate = (value?: string) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "medium" }).format(date);
+};
 
-function Hero() {
-  return (
-    <section className={heroGradient}>
-      <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/30 blur-3xl" />
-      <div className="absolute -left-6 bottom-0 h-32 w-32 rounded-full bg-accent/20 blur-3xl" />
-      <div className="relative flex flex-col gap-4 text-slate-100">
-        <p className="text-sm uppercase tracking-[0.3em] text-slate-400">ReconScope</p>
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold leading-tight md:text-4xl">
-              Совмещённые разведка, атаки и LLM-аналитика в одном дашборде
-            </h1>
-            <p className="mt-3 max-w-2xl text-slate-300">
-              Управляйте брутфорсом, SQLi, Metasploit, пассивной разведкой и LLM-аудитом
-              через единый интерфейс. Мониторьте результаты и скачивайте их для отчётности.
-            </p>
-          </div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-slate-600/70 px-4 py-2 text-sm text-slate-200">
-            <ShieldCheck className="h-4 w-4 text-accent" /> Black • Grey • White Box
-          </span>
-        </div>
-      </div>
-    </section>
+const stringify = (value: unknown) =>
+  JSON.stringify(
+    value,
+    (_, current) => (typeof current === "bigint" ? Number(current) : current),
+    2,
   );
-}
 
-function ResultCard({ item, onDownload }: { item: HistoryItem; onDownload: (item: HistoryItem) => void }) {
-  const title = item.type ?? "event";
-  const subtitle = item.target ?? item.event_id ?? item.scan_id ?? "";
-  const status = item.status ?? "unknown";
-  const timestamp = item.timestamp ?? item.updated_at ?? "";
-
-  return (
-    <div className="glass rounded-2xl p-4 border border-slate-700/60 flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-slate-400">{title}</p>
-          <p className="text-lg font-semibold text-slate-100">{subtitle}</p>
-        </div>
-        <span
-          className={clsx(
-            "px-3 py-1 text-xs font-semibold rounded-full",
-            status === "completed"
-              ? "bg-emerald-400/20 text-emerald-300"
-              : status === "failed" || status === "error"
-                ? "bg-rose-400/20 text-rose-300"
-                : "bg-slate-400/20 text-slate-300",
-          )}
-        >
-          {status}
-        </span>
-      </div>
-      <p className="text-xs text-slate-400">{timestamp}</p>
-      <div className="flex justify-end">
-        <button
-          className={clsx(buttonCls, "bg-slate-800 hover:bg-slate-700 text-slate-100 gap-2 text-sm")}
-          onClick={() => onDownload(item)}
-        >
-          <Download className="h-4 w-4" /> Скачать JSON
-        </button>
-      </div>
-    </div>
-  );
-}
+const safeItems = (items?: HistoryItem[]) => (Array.isArray(items) ? items : []);
 
 export default function App() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [detailItem, setDetailItem] = useState<HistoryItem | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [filters, setFilters] = useState<FilterState>({ search: "", status: "all" });
   const [toastList, setToastList] = useState<Toast[]>([]);
-
-  const [reconForm, setReconForm] = useState({
+  const [reconForm, setReconForm] = useState<ReconFormState>({
     target: "scanme.nmap.org",
     targetType: "ip",
-    comprehensive: false,
+    comprehensive: true,
   });
-
-  const [attackForm, setAttackForm] = useState({
+  const [attackForm, setAttackForm] = useState<AttackFormState>({
     target: "10.10.10.10",
     attackType: "bruteforce",
     profile: "black_box",
@@ -129,70 +72,84 @@ export default function App() {
     service: "ssh",
     port: 22,
   });
-
-  const [llmForm, setLlmForm] = useState({
+  const [llmForm, setLlmForm] = useState<LlmFormState>({
     url: "http://testphp.vulnweb.com",
-    goal: "Найди OWASP Top 10 и критичные конфигурационные ошибки.",
+    goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты.",
     use_browser: true,
   });
-
-  const [activeTab, setActiveTab] = useState("recon");
-  const [pending, setPending] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(() => ACCESS_PASS.length === 0);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [authError, setAuthError] = useState("");
 
   const notify = (toast: Omit<Toast, "id">) => {
-    setToastList((prev) => [...prev, { ...toast, id: crypto.randomUUID() }]);
-    setTimeout(() => setToastList((prev) => prev.slice(1)), 4000);
+    setToastList((prev) => [...prev, { ...toast, id: createId() }]);
+    setTimeout(() => setToastList((prev) => prev.slice(1)), 4200);
   };
 
   const fetchHistory = async () => {
     try {
       setLoadingHistory(true);
-      const response = await apiFetch<{ items: HistoryItem[] }>("/history");
-      setHistory(response.items.reverse());
+      const response = await apiFetch<{ items?: HistoryItem[] }>("/history");
+      setHistory(safeItems(response.items).slice().reverse());
     } catch (error) {
-      notify({ tone: "error", title: "Ошибка истории", description: String(error) });
+      notify({ tone: "error", title: "История недоступна", description: String(error) });
     } finally {
       setLoadingHistory(false);
     }
   };
 
+  const fetchHealth = async () => {
+    try {
+      const response = await apiFetch<HealthResponse>("/health");
+      setHealth(response);
+    } catch {
+      setHealth(null);
+    }
+  };
+
   useEffect(() => {
     fetchHistory();
-    const interval = setInterval(fetchHistory, 15000);
-    return () => clearInterval(interval);
+    fetchHealth();
+    const savedPass = localStorage.getItem("reconscope:access");
+    if (ACCESS_PASS && savedPass === ACCESS_PASS) {
+      setIsAuthorized(true);
+    }
+    const historyTimer = setInterval(fetchHistory, 15000);
+    const healthTimer = setInterval(fetchHealth, 30000);
+    return () => {
+      clearInterval(historyTimer);
+      clearInterval(healthTimer);
+    };
   }, []);
 
-  const handleRecon = async () => {
-    setPending(true);
+  const runAction = async (action: Exclude<PendingAction, null>, request: () => Promise<void>) => {
+    setPendingAction(action);
     try {
+      await request();
+      notify({ tone: "success", title: "Задача запущена", description: "Проверьте историю через несколько секунд" });
+      fetchHistory();
+    } catch (error) {
+      notify({ tone: "error", title: "Ошибка запуска", description: String(error) });
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleRecon = () =>
+    runAction("recon", async () => {
       const payload = {
         target: reconForm.target,
         target_type: reconForm.targetType,
         comprehensive: reconForm.comprehensive,
       };
-      if (reconForm.comprehensive) {
-        await apiFetch("/intelligence/comprehensive", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await apiFetch("/intelligence/basic", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-      }
-      notify({ tone: "success", title: "Запущено", description: "Сбор разведки стартовал" });
-      fetchHistory();
-    } catch (error) {
-      notify({ tone: "error", title: "Сбой разведки", description: String(error) });
-    } finally {
-      setPending(false);
-    }
-  };
+      await apiFetch(
+        reconForm.comprehensive ? "/intelligence/comprehensive" : "/intelligence/basic",
+        { method: "POST", body: JSON.stringify(payload) },
+      );
+    });
 
-  const handleAttack = async () => {
-    setPending(true);
-    try {
+  const handleAttack = () =>
+    runAction("attack", async () => {
       await apiFetch("/attack/execute", {
         method: "POST",
         body: JSON.stringify({
@@ -206,18 +163,10 @@ export default function App() {
           },
         }),
       });
-      notify({ tone: "success", title: "Атака запущена", description: "Результат появится в истории" });
-      fetchHistory();
-    } catch (error) {
-      notify({ tone: "error", title: "Сбой атаки", description: String(error) });
-    } finally {
-      setPending(false);
-    }
-  };
+    });
 
-  const handleLLMScan = async () => {
-    setPending(true);
-    try {
+  const handleLLMScan = () =>
+    runAction("llm", async () => {
       await apiFetch("/llm/scan", {
         method: "POST",
         body: JSON.stringify({
@@ -226,298 +175,210 @@ export default function App() {
           use_browser: llmForm.use_browser,
         }),
       });
-      notify({ tone: "success", title: "LLM-скан запущен", description: "Отчёт появится после обработки" });
-      fetchHistory();
-    } catch (error) {
-      notify({ tone: "error", title: "Сбой LLM", description: String(error) });
-    } finally {
-      setPending(false);
-    }
-  };
+    });
+
+  const historyStats = useMemo<HistoryStats>(() => {
+    const completed = history.filter((item) => item.status === "completed").length;
+    const failed = history.filter((item) => (item.status ?? "").includes("fail") || item.status === "error").length;
+    const running = history.filter((item) => ["started", "processing", "running"].includes(item.status ?? "")).length;
+    const total = history.length;
+    const successRate = total === 0 ? 0 : Math.round((completed / total) * 100);
+    return { completed, failed, running, total, successRate };
+  }, [history]);
+
+  const filteredHistory = useMemo(() => {
+    return history.filter((item) => {
+      const matchesSearch =
+        filters.search.trim().length === 0 ||
+        [item.target, item.event_id, item.scan_id, item.type]
+          .join(" ")
+          .toLowerCase()
+          .includes(filters.search.toLowerCase());
+      const matchesStatus = filters.status === "all" || item.status === filters.status;
+      return matchesSearch && matchesStatus;
+    });
+  }, [filters, history]);
 
   const downloadResult = (item: HistoryItem) => {
-    const filename = `${item.event_id || item.scan_id || "result"}.json`;
-    const blob = new Blob([JSON.stringify(item, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
+    const filename = `${item.event_id || item.scan_id || item.report_id || "result"}.json`;
+    const blob = new Blob([stringify(item)], { type: "application/json" });
     const link = document.createElement("a");
-    link.href = url;
+    link.href = URL.createObjectURL(blob);
     link.download = filename;
-    document.body.append(link);
     link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(link.href);
   };
 
-  const actionButtons = useMemo(
-    () => (
-      <div className="flex flex-wrap gap-3">
-        <button
-          onClick={fetchHistory}
-          className={clsx(buttonCls, "bg-slate-800 hover:bg-slate-700 text-slate-100 gap-2 text-sm")}
-        >
-          <RefreshCw className="h-4 w-4" /> Обновить историю
-        </button>
-        <a
-          href={`${API_BASE}/docs`}
-          target="_blank"
-          rel="noreferrer"
-          className={clsx(buttonCls, "border border-slate-700 text-slate-200 text-sm")}
-        >
-          Открыть Swagger
-        </a>
-      </div>
-    ),
-    [],
-  );
+  const detailValue = detailItem && (detailItem.data ?? detailItem);
+  const latestTimestamp = history[0]?.timestamp ?? history[0]?.updated_at;
+  const apiDocsUrl = `${API_BASE}/docs`;
+
+  const handleAuthorize = () => {
+    if (!ACCESS_PASS) {
+      setIsAuthorized(true);
+      return;
+    }
+    if (passwordInput === ACCESS_PASS) {
+      localStorage.setItem("reconscope:access", ACCESS_PASS);
+      setIsAuthorized(true);
+      setAuthError("");
+      return;
+    }
+    setAuthError("Неверный пароль");
+  };
+
+  const scrollToHub = () => {
+    if (typeof document === "undefined") return;
+    document.getElementById("command-hub")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const heroHighlights = [
+    { title: "Recon orchestration", subtitle: "Nmap · Shodan · VirusTotal", icon: Globe },
+    { title: "LLM pipeline", subtitle: "Playwright + OpenRouter", icon: Sparkles },
+    { title: "Secure playground", subtitle: "Dry-run · Audit trail", icon: Shield },
+  ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-6xl px-4 py-8 md:py-12 flex flex-col gap-8">
-        <Hero />
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-50">
+      <div className="pointer-events-none absolute inset-0 grid-overlay" />
+      <div className="blur-blob absolute -top-32 left-0 h-72 w-72 bg-primary/30" />
+      <div className="blur-blob absolute bottom-0 right-0 h-96 w-96 bg-accent/20" />
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="glass grid grid-cols-2 md:grid-cols-4 gap-2 p-2 rounded-2xl">
-            {[
-              { id: "recon", label: "Разведка" },
-              { id: "attack", label: "Атаки" },
-              { id: "llm", label: "LLM" },
-              { id: "history", label: "История" },
-            ].map((tab) => (
-              <TabsTrigger
-                key={tab.id}
-                value={tab.id}
-                className="rounded-xl px-4 py-2 text-sm font-medium data-[state=active]:bg-primary/30 data-[state=active]:text-white"
-              >
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          <TabsContent value="recon" className="mt-6">
-            <div className={formCard}>
-              <div>
-                <p className="text-xl font-semibold">Пассивная разведка</p>
-                <p className="text-sm text-slate-400">Подключены Nmap, Shodan, VirusTotal</p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <label className={labelCls}>
-                  Цель
-                  <input
-                    className={inputCls}
-                    value={reconForm.target}
-                    onChange={(e) => setReconForm({ ...reconForm, target: e.target.value })}
-                  />
-                </label>
-                <label className={labelCls}>
-                  Тип цели
-                  <select
-                    className={inputCls}
-                    value={reconForm.targetType}
-                    onChange={(e) => setReconForm({ ...reconForm, targetType: e.target.value })}
-                  >
-                    <option value="ip">IP</option>
-                    <option value="domain">Domain</option>
-                    <option value="network">Network</option>
-                  </select>
-                </label>
-                <label className="flex items-center gap-3 text-sm text-slate-200">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-primary focus:ring-primary"
-                    checked={reconForm.comprehensive}
-                    onChange={(e) => setReconForm({ ...reconForm, comprehensive: e.target.checked })}
-                  />
-                  Комплексный режим
-                </label>
-              </div>
-              <button
-                onClick={handleRecon}
-                disabled={pending}
-                className={clsx(buttonCls, "bg-primary/90 hover:bg-primary text-white gap-2 mt-2 self-start")}
-              >
-                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                Запустить разведку
-              </button>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="attack" className="mt-6">
-            <div className={formCard}>
-              <div>
-                <p className="text-xl font-semibold">Модуль атак Dev B</p>
+      <div className="relative z-10 mx-auto max-w-6xl space-y-10 px-4 py-10 lg:px-8 lg:py-14">
+        <header className="shimmer-border surface relative overflow-hidden px-6 py-8 lg:px-10">
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+            <div className="space-y-6 lg:max-w-3xl">
+              <span className="chip inline-flex items-center gap-2 bg-white/5 text-slate-300">
+                <Sparkles className="h-4 w-4 text-primary" />
+                ReconScope · Command 0.2
+              </span>
+              <div className="space-y-4">
+                <h1 className="text-4xl font-semibold leading-tight text-white lg:text-5xl">
+                  Операционный центр для разведки, атак и LLM-аудитов
+                </h1>
                 <p className="text-sm text-slate-400">
-                  Доступны брутфорс (Hydra), SQLi (sqlmap), Metasploit и аудит версий.
+                  Запускайте сценарии Black/Grey/White box, отслеживайте телеметрию инфраструктуры и анализируйте результаты
+                  в одном стекле. Каждый запуск сохраняется в истории с полным JSON.
                 </p>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className={labelCls}>
-                  Цель
-                  <input
-                    className={inputCls}
-                    value={attackForm.target}
-                    onChange={(e) => setAttackForm({ ...attackForm, target: e.target.value })}
-                  />
-                </label>
-                <label className={labelCls}>
-                  Тип атаки
-                  <select
-                    className={inputCls}
-                    value={attackForm.attackType}
-                    onChange={(e) => setAttackForm({ ...attackForm, attackType: e.target.value })}
-                  >
-                    <option value="bruteforce">Bruteforce</option>
-                    <option value="sqli">SQLi</option>
-                    <option value="metasploit">Metasploit</option>
-                    <option value="legacy_audit">Legacy Audit</option>
-                  </select>
-                </label>
-                <label className={labelCls}>
-                  Профиль теста
-                  <select
-                    className={inputCls}
-                    value={attackForm.profile}
-                    onChange={(e) => setAttackForm({ ...attackForm, profile: e.target.value })}
-                  >
-                    <option value="black_box">Black Box</option>
-                    <option value="grey_box">Grey Box</option>
-                    <option value="white_box">White Box</option>
-                  </select>
-                </label>
-                <label className="flex items-center gap-3 text-sm text-slate-200">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-primary focus:ring-primary"
-                    checked={attackForm.dry_run}
-                    onChange={(e) => setAttackForm({ ...attackForm, dry_run: e.target.checked })}
-                  />
-                  Dry-run
-                </label>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={scrollToHub}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-primary to-accent px-6 py-3 text-sm font-semibold text-slate-950 shadow-primary/40 transition hover:brightness-110"
+                >
+                  <Zap className="h-4 w-4" />
+                  Открыть командный центр
+                </button>
+                <a
+                  href={apiDocsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/30"
+                >
+                  <ArrowUpRight className="h-4 w-4" />
+                  API Docs
+                </a>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className={labelCls}>
-                  Сервис
-                  <input
-                    className={inputCls}
-                    value={attackForm.service}
-                    onChange={(e) => setAttackForm({ ...attackForm, service: e.target.value })}
-                  />
-                </label>
-                <label className={labelCls}>
-                  Порт
-                  <input
-                    className={inputCls}
-                    type="number"
-                    value={attackForm.port}
-                    onChange={(e) => setAttackForm({ ...attackForm, port: Number(e.target.value) })}
-                  />
-                </label>
+              <div className="flex flex-wrap gap-4 text-xs uppercase tracking-[0.35em] text-slate-400">
+                <span className="chip bg-white/5 text-slate-200">FastAPI Core</span>
+                <span className="chip bg-white/5 text-slate-200">Event history</span>
+                <span className="chip bg-white/5 text-slate-200">JSON export</span>
               </div>
-              <button
-                onClick={handleAttack}
-                disabled={pending}
-                className={clsx(
-                  buttonCls,
-                  "bg-gradient-to-r from-primary to-accent text-slate-900 gap-2 mt-2 self-start",
-                )}
-              >
-                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                Запустить атаку
-              </button>
             </div>
-          </TabsContent>
-          <TabsContent value="llm" className="mt-6">
-            <div className={formCard}>
-              <div>
-                <p className="text-xl font-semibold">LLM-сканер</p>
-                <p className="text-sm text-slate-400">
-                  Парсинг контента, нормализация и генерация отчёта на базе OpenRouter.
-                </p>
-              </div>
-              <label className={labelCls}>
-                URL
-                <input
-                  className={inputCls}
-                  value={llmForm.url}
-                  onChange={(e) => setLlmForm({ ...llmForm, url: e.target.value })}
-                />
-              </label>
-              <label className={labelCls}>
-                Цель аудита
-                <textarea
-                  className={clsx(inputCls, "min-h-[96px]")}
-                  value={llmForm.goal}
-                  onChange={(e) => setLlmForm({ ...llmForm, goal: e.target.value })}
-                />
-              </label>
-              <label className="flex items-center gap-3 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-primary focus:ring-primary"
-                  checked={llmForm.use_browser}
-                  onChange={(e) => setLlmForm({ ...llmForm, use_browser: e.target.checked })}
-                />
-                Использовать браузер (Playwright)
-              </label>
-              <button
-                onClick={handleLLMScan}
-                disabled={pending}
-                className={clsx(buttonCls, "bg-slate-100 text-slate-900 gap-2 mt-2 self-start")}
-              >
-                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                Запустить LLM-скан
-              </button>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="history" className="mt-6 flex flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-xl font-semibold">История операций</p>
-                <p className="text-sm text-slate-400">Все атаки, разведка и сканы в одном списке</p>
-              </div>
-              {actionButtons}
-            </div>
-            {loadingHistory ? (
-              <div className="flex items-center justify-center rounded-2xl border border-dashed border-slate-700 py-12 text-slate-400">
-                <Loader2 className="mr-3 h-5 w-5 animate-spin" />
-                Загружаем историю...
-              </div>
-            ) : history.length === 0 ? (
-              <div className="glass rounded-2xl border border-slate-700/60 p-8 text-center text-slate-400">
-                Пока нет записей. Запустите разведку, атаку или LLM-скан.
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                {history.map((item) => (
-                  <ResultCard key={item.event_id ?? item.scan_id} item={item} onDownload={downloadResult} />
+            <div className="flex-1 space-y-4 rounded-3xl border border-white/10 bg-slate-950/50 p-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  { label: "Всего задач", value: historyStats.total },
+                  { label: "Успешность", value: `${historyStats.successRate}%` },
+                  {
+                    label: "Компоненты",
+                    value: Object.keys(health?.components ?? {}).length || "—",
+                  },
+                ].map((stat) => (
+                  <article key={stat.label} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{stat.label}</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{stat.value}</p>
+                  </article>
                 ))}
               </div>
-            )}
-          </TabsContent>
-        </Tabs>
-
-        <div className="flex justify-center">
-          <p className="text-center text-sm text-slate-500">
-            Backend: FastAPI · Attack Engine Dev B · Реализация UI: React + Tailwind + Radix UI
-          </p>
-        </div>
-      </div>
-
-      <div className="fixed bottom-4 right-4 flex flex-col gap-2">
-        {toastList.map((toast) => (
-          <div
-            key={toast.id}
-            className={clsx(
-              "rounded-2xl px-4 py-3 shadow-2xl glass border",
-              toast.tone === "success" ? "border-emerald-400/40" : "border-rose-400/40",
-            )}
-          >
-            <p className="text-sm font-semibold">{toast.title}</p>
-            <p className="text-xs text-slate-400">{toast.description}</p>
+              <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-gradient-to-r from-primary/10 to-accent/10 px-4 py-3 text-sm text-slate-300">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Последнее событие</p>
+                  <p className="text-base text-white">{formatDate(latestTimestamp)}</p>
+                </div>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.3em] text-slate-400">
+                  Live feed
+                </span>
+              </div>
+            </div>
           </div>
-        ))}
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {heroHighlights.map((item) => (
+              <article
+                key={item.title}
+                className="rounded-3xl border border-white/10 bg-white/5 px-4 py-5 text-sm text-slate-300"
+              >
+                <item.icon className="mb-3 h-5 w-5 text-primary" />
+                <p className="text-base font-semibold text-white">{item.title}</p>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{item.subtitle}</p>
+              </article>
+            ))}
+          </div>
+        </header>
+
+        <section id="command-hub" className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+          <CommandHub
+            reconForm={reconForm}
+            setReconForm={setReconForm}
+            attackForm={attackForm}
+            setAttackForm={setAttackForm}
+            llmForm={llmForm}
+            setLlmForm={setLlmForm}
+            pendingAction={pendingAction}
+            onRecon={handleRecon}
+            onAttack={handleAttack}
+            onLLM={handleLLMScan}
+          />
+          <SystemPulse
+            health={health}
+            onRefresh={fetchHealth}
+            historyStats={historyStats}
+            lastUpdated={latestTimestamp}
+            formatDate={formatDate}
+          />
+        </section>
+
+        <HistoryPanel
+          filteredHistory={filteredHistory}
+          filters={filters}
+          setFilters={setFilters}
+          loadingHistory={loadingHistory}
+          onRefresh={fetchHistory}
+          onSelectItem={setDetailItem}
+          formatDate={formatDate}
+          apiDocsUrl={apiDocsUrl}
+        />
       </div>
+
+      <AuthOverlay
+        isAuthorized={isAuthorized}
+        passwordInput={passwordInput}
+        onChangePassword={setPasswordInput}
+        onSubmit={handleAuthorize}
+        authError={authError}
+        pendingAction={pendingAction}
+      />
+
+      <DetailDrawer
+        item={detailItem}
+        content={detailItem && detailValue ? stringify(detailValue) : ""}
+        onClose={() => setDetailItem(null)}
+        onDownload={downloadResult}
+      />
+
+      <ToastStack toastList={toastList} />
     </div>
   );
 }
+
 
