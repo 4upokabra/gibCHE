@@ -44,10 +44,14 @@ def _extract_payload(raw_response: RawLLMResponse) -> Dict[str, Any]:
     content = choices[0].get("message", {}).get("content", "").strip()
     if not content:
         raise PostProcessingError("LLM response content is empty")
+    content = _strip_code_fence(content)
     try:
         return json.loads(content)
     except json.JSONDecodeError as exc:
-        raise PostProcessingError(f"Failed to parse JSON: {exc}") from exc
+        fragment = _extract_json_fragment(content)
+        if fragment is None:
+            raise PostProcessingError(f"Failed to parse JSON: {exc}") from exc
+        return fragment
 
 
 def _build_finding(item: Dict[str, Any]) -> ScanFinding:
@@ -94,5 +98,32 @@ def _as_list(value: Any) -> List[str]:
     if isinstance(value, list):
         return [str(item) for item in value if item]
     return [str(value)]
+
+
+def _strip_code_fence(content: str) -> str:
+    if not content.startswith("```"):
+        return content
+    lines = content.splitlines()
+    # Убираем первую строку с ```json или ````
+    lines = lines[1:]
+    while lines and lines[-1].strip().startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _extract_json_fragment(text: str) -> Any | None:
+    decoder = json.JSONDecoder()
+    stripped = text.strip()
+    for opener in ("{", "["):
+        start = stripped.find(opener)
+        if start == -1:
+            continue
+        candidate = stripped[start:]
+        try:
+            obj, _ = decoder.raw_decode(candidate)
+            return obj
+        except json.JSONDecodeError:
+            continue
+    return None
 
 

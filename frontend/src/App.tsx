@@ -6,6 +6,7 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { AuthOverlay } from "./components/AuthOverlay";
 import { ToastStack } from "./components/ToastStack";
+import type { ActionSummary, LlmReport } from "./types";
 import {
   AttackFormState,
   FilterState,
@@ -241,6 +242,51 @@ export default function App() {
   const latestTimestamp = history[0]?.timestamp ?? history[0]?.updated_at;
   const apiDocsUrl = `${API_BASE}/docs`;
 
+  const summaryInfo = useMemo(() => {
+    if (!detailItem) return null;
+
+    const rawData = detailItem.data;
+    const dataObject =
+      rawData && typeof rawData === "object" && !Array.isArray(rawData) ? (rawData as Record<string, unknown>) : undefined;
+
+    const dataReport =
+      dataObject && "report" in dataObject
+        ? ((dataObject as { report?: unknown }).report as LlmReport | undefined)
+        : undefined;
+    const nestedActionSummary =
+      dataObject && "action_summary" in dataObject
+        ? ((dataObject as { action_summary?: unknown }).action_summary as ActionSummary | undefined)
+        : undefined;
+
+    const report = detailItem.report ?? dataReport;
+    const actionSummary =
+      detailItem.action_summary ?? nestedActionSummary ?? report?.action_summary ?? null;
+
+    const summaryTextCandidate =
+      (typeof detailItem.summary === "string" ? detailItem.summary : undefined) ??
+      (dataObject && "summary" in dataObject && typeof (dataObject as { summary?: unknown }).summary === "string"
+        ? ((dataObject as { summary?: string }).summary as string)
+        : undefined) ??
+      (report && typeof report.summary === "string" ? report.summary : undefined);
+
+    if (!actionSummary && !summaryTextCandidate) {
+      return null;
+    }
+
+    const defensive =
+      actionSummary?.defensive_actions?.map((item) => item?.trim()).filter((item): item is string => Boolean(item)) ?? [];
+    const offensive =
+      actionSummary?.offensive_actions?.map((item) => item?.trim()).filter((item): item is string => Boolean(item)) ?? [];
+    const changes = actionSummary?.changes?.trim();
+
+    return {
+      summary: summaryTextCandidate,
+      changes: changes && changes.length > 0 ? changes : undefined,
+      defensive,
+      offensive,
+    };
+  }, [detailItem]);
+
   const handleAuthorize = () => {
     if (!ACCESS_PASS) {
       setIsAuthorized(true);
@@ -400,6 +446,7 @@ export default function App() {
       <DetailDrawer
         item={detailItem}
         content={detailItem && detailValue ? stringify(detailValue) : ""}
+        summaryInfo={summaryInfo}
         onClose={() => setDetailItem(null)}
         onDownload={downloadResult}
       />

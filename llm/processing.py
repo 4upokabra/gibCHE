@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from bs4 import BeautifulSoup, Comment
 
@@ -28,8 +28,8 @@ def build_structured_page(
     sections = _extract_sections(soup, options)
     main_text = "\n\n".join(section.content for section in sections)
 
-    metadata.setdefault("title", soup.title.string.strip() if soup.title else "")
-    metadata.setdefault("language", soup.html.get("lang") if soup.html else None)
+    metadata.setdefault("title", _extract_title(soup))
+    metadata.setdefault("language", _extract_language(soup))
 
     tokens_estimate = _estimate_tokens(main_text)
 
@@ -39,6 +39,24 @@ def build_structured_page(
         metadata={**page.metadata, **metadata},
         tokens_estimate=tokens_estimate,
     )
+
+
+def _extract_title(soup: BeautifulSoup) -> str:
+    title_tag = soup.title
+    if not title_tag:
+        return ""
+    text = title_tag.get_text(separator=" ", strip=True)
+    return text
+
+
+def _extract_language(soup: BeautifulSoup) -> Optional[str]:
+    html_tag = soup.html
+    if not html_tag:
+        return None
+    lang = html_tag.get("lang") or html_tag.get("xml:lang")
+    if not lang:
+        return None
+    return str(lang).strip() or None
 
 
 def _sanitize_html(raw_html: str, options: ProcessingOptions) -> Tuple[BeautifulSoup, Dict]:

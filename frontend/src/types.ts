@@ -36,6 +36,18 @@ export type LlmFormState = {
   use_browser: boolean;
 };
 
+export type ActionSummary = {
+  changes?: string;
+  defensive_actions?: string[];
+  offensive_actions?: string[];
+};
+
+export type LlmReport = {
+  summary?: string;
+  action_summary?: ActionSummary;
+  [key: string]: unknown;
+};
+
 export type HistoryItem = {
   event_id?: string;
   scan_id?: string;
@@ -49,6 +61,10 @@ export type HistoryItem = {
   details?: string;
   message?: string;
   error?: string;
+  summary?: string;
+  metadata?: Record<string, unknown>;
+  action_summary?: ActionSummary;
+  report?: LlmReport;
 };
 
 export type HistoryStats = {
