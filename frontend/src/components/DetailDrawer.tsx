@@ -22,18 +22,29 @@ export function DetailDrawer({ item, content, summaryInfo, onClose, onDownload }
   const hasSummary =
     !!summaryInfo &&
     Boolean(summaryInfo.summary || summaryInfo.changes || summaryInfo.defensive.length || summaryInfo.offensive.length);
+  const formatDate = (value?: string) => {
+    if (!value) return "";
+    const date = new Date(value);
+    return Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "medium" }).format(date);
+  };
+  const baseLabel =
+    (typeof item.label === "string" && item.label.trim().length > 0
+      ? item.label.trim()
+      : item.target || item.event_id || item.scan_id) || "Без названия";
+  const dateLabel = formatDate(item.timestamp ?? item.updated_at);
+  const headerLabel = dateLabel ? `${baseLabel} • ${dateLabel}` : baseLabel;
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-end bg-black/70 px-4 py-8 backdrop-blur">
       <div className="shimmer-border surface relative h-full w-full max-w-2xl overflow-hidden">
-        <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-          <div>
+        <header className="relative flex flex-wrap items-center gap-3 border-b border-white/10 px-6 py-4 pr-16">
+          <div className="min-w-0 flex-1">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Подробности задачи</p>
-            <p className="text-lg font-semibold text-white">
-              {item.target || item.event_id || item.scan_id || "Без названия"}
+            <p className="truncate text-lg font-semibold text-white" title={headerLabel}>
+              {headerLabel}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-shrink-0 gap-2">
             <button
               className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-3 py-1.5 text-xs text-slate-200 transition hover:border-white/30"
               onClick={() => onDownload(item)}
@@ -41,13 +52,14 @@ export function DetailDrawer({ item, content, summaryInfo, onClose, onDownload }
               <FileDown className="h-4 w-4" />
               Скачать JSON
             </button>
-            <button
-              className="rounded-full border border-white/10 p-2 text-slate-300 transition hover:border-white/40"
-              onClick={onClose}
-            >
-              <X className="h-4 w-4" />
-            </button>
           </div>
+          <button
+            className="absolute right-4 top-4 rounded-full border border-white/10 p-2 text-slate-300 transition hover:border-white/40"
+            onClick={onClose}
+            aria-label="Закрыть"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </header>
         <div className="h-full max-h-[80vh] space-y-4 overflow-y-auto px-6 py-5">
           {hasSummary && summaryInfo && (

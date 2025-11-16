@@ -14,10 +14,12 @@ import {
   Sparkles,
   Target,
   Terminal,
+  Workflow,
   Zap,
 } from "lucide-react";
 import {
   AttackFormState,
+  AutoPentestForm,
   LlmFormState,
   PendingAction,
   ReconFormState,
@@ -37,10 +39,13 @@ type CommandHubProps = {
   setAttackForm: Dispatch<SetStateAction<AttackFormState>>;
   llmForm: LlmFormState;
   setLlmForm: Dispatch<SetStateAction<LlmFormState>>;
+  autopentestForm: AutoPentestForm;
+  setAutopentestForm: Dispatch<SetStateAction<AutoPentestForm>>;
   pendingAction: PendingAction;
   onRecon: () => void;
   onAttack: () => void;
   onLLM: () => void;
+  onAutoPentest: () => void;
 };
 
 const tabTriggerClass =
@@ -56,10 +61,13 @@ export function CommandHub({
   setAttackForm,
   llmForm,
   setLlmForm,
+  autopentestForm,
+  setAutopentestForm,
   pendingAction,
   onRecon,
   onAttack,
   onLLM,
+  onAutoPentest,
 }: CommandHubProps) {
   const isBruteforce = attackForm.attackType === "bruteforce";
   const isMetasploit = attackForm.attackType === "metasploit";
@@ -97,7 +105,7 @@ export function CommandHub({
       </div>
 
       <Tabs.Root defaultValue="recon" className="mt-8 flex flex-col gap-6">
-        <Tabs.List className="grid gap-2 sm:grid-cols-3">
+        <Tabs.List className="grid gap-2 sm:grid-cols-4">
           <Tabs.Trigger value="recon" className={tabTriggerClass}>
             <Target className="h-4 w-4 text-primary" />
             Разведка
@@ -109,6 +117,10 @@ export function CommandHub({
           <Tabs.Trigger value="llm" className={tabTriggerClass}>
             <Sparkles className="h-4 w-4 text-sky-300" />
             LLM аудит
+          </Tabs.Trigger>
+          <Tabs.Trigger value="auto" className={tabTriggerClass}>
+            <Workflow className="h-4 w-4 text-emerald-300" />
+            Auto Pentest
           </Tabs.Trigger>
         </Tabs.List>
 
@@ -228,6 +240,16 @@ export function CommandHub({
               Можно отключить лишние источники и тонко настроить запросы – параметры попадут в backend вместе с задачей.
             </p>
           </div>
+
+          <label className="block space-y-2">
+            <span className={labelClass}>Название задачи (опционально)</span>
+            <input
+              className={inputClass}
+              value={reconForm.label}
+              onChange={(e) => setReconForm((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Например, «Скан внешнего периметра»"
+            />
+          </label>
 
           <button onClick={onRecon} disabled={pendingAction === "recon"} className={actionButtonClass}>
             {pendingAction === "recon" ? (
@@ -412,6 +434,16 @@ export function CommandHub({
             </div>
           )}
 
+          <label className="block space-y-2">
+            <span className={labelClass}>Название задачи (опционально)</span>
+            <input
+              className={inputClass}
+              value={attackForm.label}
+              onChange={(e) => setAttackForm((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Например, «Hydra по SSH 146.103.121»"
+            />
+          </label>
+
           <button onClick={onAttack} disabled={pendingAction === "attack"} className={actionButtonClass}>
             {pendingAction === "attack" ? (
               <>
@@ -459,6 +491,16 @@ export function CommandHub({
             </span>
           </label>
 
+          <label className="block space-y-2">
+            <span className={labelClass}>Название задачи (опционально)</span>
+            <input
+              className={inputClass}
+              value={llmForm.label}
+              onChange={(e) => setLlmForm((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Например, «LLM аудит портала demo»"
+            />
+          </label>
+
           <button onClick={onLLM} disabled={pendingAction === "llm"} className={actionButtonClass}>
             {pendingAction === "llm" ? (
               <>
@@ -469,6 +511,103 @@ export function CommandHub({
               <>
                 <Sparkles className="h-4 w-4" />
                 Запустить LLM-скан
+              </>
+            )}
+          </button>
+        </Tabs.Content>
+
+        <Tabs.Content value="auto" className="space-y-5">
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-200">Auto Pentester</p>
+            <p className="text-slate-400 text-sm">
+              LLM самостоятельно построит стратегию разведки и атак, выполнит шаги и подготовит отчёт. Укажите цель,
+              режим доступа и деловой контекст.
+            </p>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <label className="block space-y-2">
+              <span className={labelClass}>Цель</span>
+              <input
+                className={inputClass}
+                value={autopentestForm.target}
+                onChange={(e) => setAutopentestForm((prev) => ({ ...prev, target: e.target.value }))}
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className={labelClass}>Профиль</span>
+              <select
+                className={inputClass}
+                value={autopentestForm.profile}
+                onChange={(e) =>
+                  setAutopentestForm((prev) => ({ ...prev, profile: e.target.value as AutoPentestForm["profile"] }))
+                }
+              >
+                <option value="black_box">Black box</option>
+                <option value="grey_box">Grey box</option>
+                <option value="white_box">White box</option>
+              </select>
+            </label>
+          </div>
+          <label className="block space-y-2">
+            <span className={labelClass}>Цель проверки</span>
+            <textarea
+              className={textareaClass}
+              rows={3}
+              value={autopentestForm.goal}
+              onChange={(e) => setAutopentestForm((prev) => ({ ...prev, goal: e.target.value }))}
+              placeholder="Например: поиск уязвимостей OWASP Top 10 на внешнем портале"
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className={labelClass}>Scope / ограничения</span>
+            <textarea
+              className={textareaClass}
+              rows={3}
+              value={autopentestForm.scope}
+              onChange={(e) => setAutopentestForm((prev) => ({ ...prev, scope: e.target.value }))}
+              placeholder="Сегмент сети, поддомены, политики dry-run и т. д."
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className={labelClass}>Комментарии / пожелания</span>
+            <textarea
+              className={textareaClass}
+              rows={3}
+              value={autopentestForm.notes}
+              onChange={(e) => setAutopentestForm((prev) => ({ ...prev, notes: e.target.value }))}
+              placeholder="Что важно учесть: интересующие сервисы, ограничения, целевые данные..."
+            />
+          </label>
+
+          <label className="block space-y-2">
+            <span className={labelClass}>Название задачи (опционально)</span>
+            <input
+              className={inputClass}
+              value={autopentestForm.label}
+              onChange={(e) => setAutopentestForm((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Например, «Auto Pentest интернет-банка»"
+            />
+          </label>
+
+          <div className="rounded-3xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-400">
+            «Auto Pentest» создаёт пошаговый план (разведка → атаки → отчёт) и запускает встроенные инструменты. История
+            и прогресс появятся в ленте событий.
+          </div>
+
+          <button
+            onClick={onAutoPentest}
+            disabled={pendingAction === "autopentest"}
+            className={actionButtonClass}
+          >
+            {pendingAction === "autopentest" ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Запускаем…
+              </>
+            ) : (
+              <>
+                <Workflow className="h-4 w-4" />
+                Стартовать Auto Pentest
               </>
             )}
           </button>

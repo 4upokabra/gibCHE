@@ -16,6 +16,7 @@ import {
   LlmFormState,
   PendingAction,
   ReconFormState,
+  TaskControlState,
   Toast,
 } from "./types";
 
@@ -51,12 +52,18 @@ const stringify = (value: unknown) =>
   );
 
 const safeItems = (items?: HistoryItem[]) => (Array.isArray(items) ? items : []);
+const mapTasks = (items?: TaskControlState[]) =>
+  (Array.isArray(items) ? items : []).reduce<Record<string, TaskControlState>>((acc, task) => {
+    acc[task.task_id] = task;
+    return acc;
+  }, {});
 
 export default function App() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [detailItem, setDetailItem] = useState<HistoryItem | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [tasks, setTasks] = useState<Record<string, TaskControlState>>({});
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [filters, setFilters] = useState<FilterState>({ search: "", status: "all" });
   const [toastList, setToastList] = useState<Toast[]>([]);
@@ -72,6 +79,7 @@ export default function App() {
     nmapArgs: "-sC -sV",
     shodanQuery: "ssl:true org:\"Example Corp\"",
     virustotalFlags: "--include-malware --historical",
+    label: "",
   });
   const [attackForm, setAttackForm] = useState<AttackFormState>({
     target: "10.10.10.10",
@@ -87,11 +95,21 @@ export default function App() {
     metasploitPayload: "linux/x64/shell_reverse_tcp",
     metasploitOptions: "LHOST=10.10.14.2;LPORT=4444",
     sqlmapFlags: "--risk=3 --level=5 --batch",
+    label: "",
   });
   const [llmForm, setLlmForm] = useState<LlmFormState>({
     url: "http://testphp.vulnweb.com",
     goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты.",
     use_browser: true,
+    label: "",
+  });
+  const [autopentestForm, setAutopentestForm] = useState<AutoPentestForm>({
+    target: "scanme.nmap.org",
+    profile: "black_box",
+    goal: "Построить цепочку атак и подготовить отчёт.",
+    scope: "",
+    notes: "",
+    label: "",
   });
   const [isAuthorized, setIsAuthorized] = useState(() => ACCESS_PASS.length === 0);
   const [passwordInput, setPasswordInput] = useState("");
@@ -105,8 +123,12 @@ export default function App() {
   const fetchHistory = async () => {
     try {
       setLoadingHistory(true);
-      const response = await apiFetch<{ items?: HistoryItem[] }>("/history");
-      setHistory(safeItems(response.items).slice().reverse());
+      const [historyResponse, tasksResponse] = await Promise.all([
+        apiFetch<{ items?: HistoryItem[] }>("/history"),
+        apiFetch<{ items?: TaskControlState[] }>("/tasks"),
+      ]);
+      setHistory(safeItems(historyResponse.items).slice().reverse());
+      setTasks(mapTasks(tasksResponse.items));
     } catch (error) {
       notify({ tone: "error", title: "История недоступна", description: String(error) });
     } finally {
@@ -153,6 +175,7 @@ export default function App() {
 
   const handleRecon = () =>
     runAction("recon", async () => {
+      const label = reconForm.label.trim();
       const payload = {
         target: reconForm.target,
         target_type: reconForm.targetType,
@@ -163,6 +186,7 @@ export default function App() {
           shodan_query: reconForm.shodanQuery,
           virustotal_flags: reconForm.virustotalFlags,
         },
+        label: label || undefined,
       };
       await apiFetch(
         reconForm.comprehensive ? "/intelligence/comprehensive" : "/intelligence/basic",
@@ -172,6 +196,7 @@ export default function App() {
 
   const handleAttack = () =>
     runAction("attack", async () => {
+      const label = attackForm.label.trim();
       await apiFetch("/attack/execute", {
         method: "POST",
         body: JSON.stringify({
@@ -190,43 +215,69 @@ export default function App() {
             metasploit_options: attackForm.metasploitOptions,
             sqlmap_flags: attackForm.sqlmapFlags,
           },
+          label: label || undefined,
         }),
       });
     });
 
   const handleLLMScan = () =>
     runAction("llm", async () => {
+      const label = llmForm.label.trim();
       await apiFetch("/llm/scan", {
         method: "POST",
         body: JSON.stringify({
           url: llmForm.url,
           goal: llmForm.goal,
           use_browser: llmForm.use_browser,
+          label: label || undefined,
+        }),
+      });
+    });
+
+  const handleAutoPentest = () =>
+    runAction("autopentest", async () => {
+      const label = autopentestForm.label.trim();
+      await apiFetch("/autopentest/start", {
+        method: "POST",
+        body: JSON.stringify({
+          target: autopentestForm.target,
+          profile: autopentestForm.profile,
+          goal: autopentestForm.goal,
+          scope: autopentestForm.scope,
+          notes: autopentestForm.notes,
+          label: label || undefined,
         }),
       });
     });
 
   const historyStats = useMemo<HistoryStats>(() => {
-    const completed = history.filter((item) => item.status === "completed").length;
-    const failed = history.filter((item) => (item.status ?? "").includes("fail") || item.status === "error").length;
-    const running = history.filter((item) => ["started", "processing", "running"].includes(item.status ?? "")).length;
+    const effectiveStatuses = history.map((item) => {
+      const taskId = item.task_id ?? item.event_id ?? item.scan_id ?? item.report_id;
+      return tasks[taskId ?? ""]?.status ?? item.status ?? "completed";
+    });
+    const completed = effectiveStatuses.filter((status) => status === "completed").length;
+    const failed = effectiveStatuses.filter((status) => status.includes("fail") || status === "error").length;
+    const running = effectiveStatuses.filter((status) => ["started", "processing", "running"].includes(status)).length;
     const total = history.length;
     const successRate = total === 0 ? 0 : Math.round((completed / total) * 100);
     return { completed, failed, running, total, successRate };
-  }, [history]);
+  }, [history, tasks]);
 
   const filteredHistory = useMemo(() => {
     return history.filter((item) => {
       const matchesSearch =
         filters.search.trim().length === 0 ||
-        [item.target, item.event_id, item.scan_id, item.type]
+        [item.label, item.target, item.event_id, item.scan_id, item.type]
           .join(" ")
           .toLowerCase()
           .includes(filters.search.toLowerCase());
-      const matchesStatus = filters.status === "all" || item.status === filters.status;
+      const taskId = item.task_id ?? item.event_id ?? item.scan_id ?? item.report_id;
+      const taskStatus = taskId ? tasks[taskId]?.status : undefined;
+      const effectiveStatus = taskStatus ?? item.status;
+      const matchesStatus = filters.status === "all" || effectiveStatus === filters.status;
       return matchesSearch && matchesStatus;
     });
-  }, [filters, history]);
+  }, [filters, history, tasks]);
 
   const downloadResult = (item: HistoryItem) => {
     const filename = `${item.event_id || item.scan_id || item.report_id || "result"}.json`;
@@ -236,6 +287,28 @@ export default function App() {
     link.download = filename;
     link.click();
     URL.revokeObjectURL(link.href);
+  };
+
+  const handleTaskAction = async (taskId: string, action: "pause" | "resume" | "cancel") => {
+    try {
+      await apiFetch(`/tasks/${taskId}/${action}`, {
+        method: "POST",
+        body: action === "cancel" ? JSON.stringify({ reason: "Остановлено через интерфейс" }) : undefined,
+      });
+      notify({
+        tone: "success",
+        title: "Статус обновлён",
+        description:
+          action === "pause"
+            ? "Задача поставлена на паузу"
+            : action === "resume"
+              ? "Задача продолжена"
+              : "Задача отменена",
+      });
+      fetchHistory();
+    } catch (error) {
+      notify({ tone: "error", title: "Не удалось обновить задачу", description: String(error) });
+    }
   };
 
   const detailValue = detailItem && (detailItem.data ?? detailItem);
@@ -408,10 +481,13 @@ export default function App() {
             setAttackForm={setAttackForm}
             llmForm={llmForm}
             setLlmForm={setLlmForm}
+            autopentestForm={autopentestForm}
+            setAutopentestForm={setAutopentestForm}
             pendingAction={pendingAction}
             onRecon={handleRecon}
             onAttack={handleAttack}
             onLLM={handleLLMScan}
+            onAutoPentest={handleAutoPentest}
           />
           <SystemPulse
             health={health}
@@ -431,6 +507,8 @@ export default function App() {
           onSelectItem={setDetailItem}
           formatDate={formatDate}
           apiDocsUrl={apiDocsUrl}
+          taskControls={tasks}
+          onTaskAction={handleTaskAction}
         />
       </div>
 

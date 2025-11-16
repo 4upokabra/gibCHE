@@ -1,4 +1,4 @@
-export type PendingAction = "recon" | "attack" | "llm" | null;
+export type PendingAction = "recon" | "attack" | "llm" | "autopentest" | null;
 
 export type ReconFormState = {
   target: string;
@@ -12,6 +12,7 @@ export type ReconFormState = {
   nmapArgs: string;
   shodanQuery: string;
   virustotalFlags: string;
+  label: string;
 };
 
 export type AttackFormState = {
@@ -28,12 +29,14 @@ export type AttackFormState = {
   metasploitPayload: string;
   metasploitOptions: string;
   sqlmapFlags: string;
+  label: string;
 };
 
 export type LlmFormState = {
   url: string;
   goal: string;
   use_browser: boolean;
+  label: string;
 };
 
 export type ActionSummary = {
@@ -52,6 +55,7 @@ export type HistoryItem = {
   event_id?: string;
   scan_id?: string;
   report_id?: string;
+  task_id?: string;
   type?: string;
   status?: string;
   timestamp?: string;
@@ -65,6 +69,7 @@ export type HistoryItem = {
   metadata?: Record<string, unknown>;
   action_summary?: ActionSummary;
   report?: LlmReport;
+  label?: string;
 };
 
 export type HistoryStats = {
@@ -80,6 +85,16 @@ export type FilterState = {
   status: string;
 };
 
+export type TaskControlState = {
+  task_id: string;
+  kind: string;
+  status: string;
+  metadata?: Record<string, unknown>;
+  error?: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type HealthResponse = {
   status: string;
   timestamp: string;
@@ -91,5 +106,14 @@ export type Toast = {
   title: string;
   description: string;
   tone: "success" | "error";
+};
+
+export type AutoPentestForm = {
+  target: string;
+  profile: "black_box" | "grey_box" | "white_box";
+  goal: string;
+  scope: string;
+  notes: string;
+  label: string;
 };
 

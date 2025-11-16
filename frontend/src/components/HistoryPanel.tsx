@@ -1,7 +1,7 @@
 import { Dispatch, SetStateAction } from "react";
-import { ArrowUpRight, FileDown, RefreshCw, Search } from "lucide-react";
+import { ArrowUpRight, FileDown, Pause, Play, RefreshCw, Search, Square } from "lucide-react";
 import clsx from "clsx";
-import { FilterState, HistoryItem } from "../types";
+import { FilterState, HistoryItem, TaskControlState } from "../types";
 import { STATUS_COLORS } from "../constants";
 
 type HistoryPanelProps = {
@@ -13,6 +13,8 @@ type HistoryPanelProps = {
   onSelectItem: (item: HistoryItem) => void;
   formatDate: (value?: string) => string;
   apiDocsUrl: string;
+  taskControls: Record<string, TaskControlState>;
+  onTaskAction: (taskId: string, action: "pause" | "resume" | "cancel") => void;
 };
 
 const statusOptions = [
@@ -21,6 +23,9 @@ const statusOptions = [
   { value: "started", label: "Started" },
   { value: "processing", label: "Processing" },
   { value: "running", label: "Running" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "paused", label: "Paused" },
+  { value: "cancelled", label: "Cancelled" },
   { value: "failed", label: "Failed" },
   { value: "error", label: "Error" },
 ];
@@ -34,6 +39,8 @@ export function HistoryPanel({
   onSelectItem,
   formatDate,
   apiDocsUrl,
+  taskControls,
+  onTaskAction,
 }: HistoryPanelProps) {
   return (
     <section className="shimmer-border surface space-y-6 p-6 lg:p-7">
@@ -109,34 +116,82 @@ export function HistoryPanel({
               key={item.event_id ?? item.scan_id ?? item.report_id ?? item.timestamp ?? `${item.target}-${index}`}
               className="group flex flex-col gap-3 rounded-2xl border border-white/5 bg-white/5 px-4 py-3 transition hover:border-white/30 hover:bg-white/10"
             >
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>{formatDate(item.timestamp ?? item.updated_at)}</span>
-                <span
-                  className={clsx(
-                    "rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize",
-                    STATUS_COLORS[item.status ?? "completed"] ?? "bg-white/10 text-slate-200",
-                  )}
-                >
-                  {item.status ?? "completed"}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-base font-semibold text-white">
-                    {item.target || item.event_id || item.scan_id || "Без названия"}
-                  </p>
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{item.type ?? "custom"}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => onSelectItem(item)}
-                    className="inline-flex items-center gap-1 rounded-2xl border border-white/10 px-3 py-1.5 text-xs text-slate-200 transition hover:border-white/30"
-                  >
-                    <FileDown className="h-3.5 w-3.5" />
-                    JSON
-                  </button>
-                </div>
-              </div>
+              {(() => {
+                const taskId = item.task_id ?? item.event_id ?? item.scan_id ?? item.report_id;
+                const taskControl = taskId ? taskControls[taskId] : undefined;
+                const status = taskControl?.status ?? item.status ?? "completed";
+                const isFinal = ["completed", "failed", "cancelled", "error"].includes(status);
+                const showPause = taskControl && ["running", "processing", "started", "scheduled"].includes(status);
+                const showResume = taskControl && status === "paused";
+                const showStop = taskControl && !isFinal;
+
+                const customLabel = typeof item.label === "string" ? item.label.trim() : "";
+                const targetLabel = customLabel || item.target || item.event_id || item.scan_id || "Без названия";
+                const dateLabel = formatDate(item.timestamp ?? item.updated_at);
+                return (
+                  <>
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span>{formatDate(item.timestamp ?? item.updated_at)}</span>
+                      <span
+                        className={clsx(
+                          "rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize",
+                          STATUS_COLORS[status] ?? "bg-white/10 text-slate-200",
+                        )}
+                      >
+                        {status}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 text-center">
+                      <div>
+                        <p className="text-base font-semibold text-white">
+                          {targetLabel}
+                        </p>
+                        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{dateLabel}</p>
+                      </div>
+                      {(showPause || showResume || showStop) && taskControl && (
+                        <div className="flex flex-wrap justify-center gap-2">
+                          {showPause && (
+                            <button
+                              onClick={() => onTaskAction(taskControl.task_id, "pause")}
+                              className="inline-flex items-center gap-1 rounded-2xl border border-white/10 px-3 py-1.5 text-xs text-slate-200 transition hover:border-white/30"
+                            >
+                              <Pause className="h-3.5 w-3.5" />
+                              Пауза
+                            </button>
+                          )}
+                          {showResume && (
+                            <button
+                              onClick={() => onTaskAction(taskControl.task_id, "resume")}
+                              className="inline-flex items-center gap-1 rounded-2xl border border-white/10 px-3 py-1.5 text-xs text-slate-200 transition hover:border-white/30"
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                              Продолжить
+                            </button>
+                          )}
+                          {showStop && (
+                            <button
+                              onClick={() => onTaskAction(taskControl.task_id, "cancel")}
+                              className="inline-flex items-center gap-1 rounded-2xl border border-white/10 px-3 py-1.5 text-xs text-rose-200 transition hover:border-rose-400/60"
+                            >
+                              <Square className="h-3.5 w-3.5" />
+                              Стоп
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => onSelectItem(item)}
+                          className="inline-flex items-center gap-1 rounded-2xl border border-white/10 px-3 py-1.5 text-xs text-slate-200 transition hover:border-white/30"
+                        >
+                          <FileDown className="h-3.5 w-3.5" />
+                          JSON
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
               {item.details && (
                 <p className="text-sm text-slate-400">
                   {item.details.slice(0, 220)}

@@ -1,9 +1,14 @@
+import os
+
 import requests
+from dotenv import load_dotenv
 from typing import Dict, Any
+
+load_dotenv()
 
 class VirusTotalClient:
     def __init__(self, api_key: str = None):
-        self.api_key = api_key
+        self.api_key = api_key or os.getenv("VIRUSTOTAL_API_KEY")
         self.base_url = "https://www.virustotal.com/api/v3"
 
     def get_ip_info(self, ip: str) -> Dict[str, Any]:

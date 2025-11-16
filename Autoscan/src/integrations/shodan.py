@@ -1,15 +1,50 @@
+import ipaddress
+import os
+import socket
+from urllib.parse import urlparse
+
 import shodan
 import requests
+from dotenv import load_dotenv
 from typing import Dict, Any, Optional
+
+load_dotenv()
 
 class ShodanClient:
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key
-        if api_key:
-            self.api = shodan.Shodan(api_key)
+        self.api_key = api_key or os.getenv("SHODAN_API_KEY")
+        if self.api_key:
+            self.api = shodan.Shodan(self.api_key)
         else:
             self.api = None
     
+    def _extract_host(self, target: str) -> str:
+        """Возвращает hostname или IP из URL/доменного имени"""
+        cleaned = (target or "").strip()
+        if not cleaned:
+            return ""
+        if cleaned.startswith(("http://", "https://")):
+            parsed = urlparse(cleaned)
+        else:
+            parsed = urlparse(f"//{cleaned}", scheme="http")
+        if parsed.hostname:
+            return parsed.hostname
+        return cleaned.split("/")[0].split(":")[0]
+
+    def _resolve_ip(self, target: str) -> str:
+        """Преобразует домен/URL/IP в IP-адрес для Shodan"""
+        host = self._extract_host(target)
+        if not host:
+            raise ValueError("Target is empty")
+        try:
+            ipaddress.ip_address(host)
+            return host
+        except ValueError:
+            try:
+                return socket.gethostbyname(host)
+            except socket.gaierror as exc:
+                raise ValueError(f"Не удалось определить IP для {host}: {exc}") from exc
+
     def get_host(self, ip: str) -> Dict[str, Any]:
         """Получение информации о хосте через официальную библиотеку Shodan"""
         if not self.api_key:
@@ -21,11 +56,14 @@ class ShodanClient:
             }
         
         try:
-            host_info = self.api.host(ip)
+            resolved_ip = self._resolve_ip(ip)
+            host_info = self.api.host(resolved_ip)
             
             # Форматируем только важную информацию
             formatted_data = {
-                "ip": host_info.get('ip_str'),
+                "input": ip,
+                "ip": host_info.get('ip_str') or resolved_ip,
+                "resolved_ip": resolved_ip,
                 "country": host_info.get('country_name'),
                 "city": host_info.get('city'),
                 "org": host_info.get('org'),

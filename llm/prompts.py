@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import List
+import json
+from typing import Any, Dict, List
 
 from .models import (
     LLMMessage,
@@ -41,7 +42,13 @@ RESPONSE_SCHEMA = """{
 ACTION_SUMMARY_SCHEMA = """{
   "changes": "string",
   "defensive_actions": ["string"],
-  "offensive_actions": ["string"]
+  "offensive_actions": ["string"],
+  "playbook": [
+    {
+      "vector": "string",
+      "steps": ["string"]
+    }
+  ]
 }"""
 
 
@@ -97,7 +104,10 @@ def build_action_summary_messages(
     user_prompt = (
         "Проанализируй итоги сканирования и сформируй краткое резюме изменений, "
         "а также списки приоритетных шагов защиты и возможных шагов атаки "
-        "для команды Red Team. Ответ строго в формате JSON:\n"
+        "для команды Red Team. Дополнительно, если среди находок есть стандартные типы атак "
+        "(SQLi, XSS, CSRF, SSRF, Path Traversal, RCE, Directory Listing, LFI/RFI и т.д.), "
+        "сформируй практический мини-плейбук: упомяни вектор и 2-4 шага по реализации атаки "
+        "в тестовой среде. Ответ строго в формате JSON:\n"
         f"{ACTION_SUMMARY_SCHEMA}\n\n"
         f"Общие выводы сканирования:\n{report.summary}\n\n"
         "Детали находок:\n"
@@ -109,7 +119,86 @@ def build_action_summary_messages(
             role="system",
             content=(
                 "Ты — аналитик кибербезопасности. Подготовь exec-summary для CISO, "
-                "разделив рекомендации по защите и потенциальные сценарии атаки."
+                "разделив рекомендации по защите и потенциальные сценарии атаки. "
+                "Если есть типовые уязвимости, добавь практический плейбук атакующих действий."
+            ),
+        ),
+        LLMMessage(role="user", content=user_prompt),
+    ]
+
+
+AUTO_PENTEST_PLAN_SCHEMA = """{
+  "objective": "string",
+  "steps": [
+    {
+      "id": "string",
+      "kind": "audit|recon|scan|attack|report",
+      "method": "llm.audit|intelligence.basic|nmap.quick|nmap.full|nmap.custom|shodan.host|virustotal.ip|attack.bruteforce|attack.sqli|attack.metasploit|json.report|llm.report",
+      "args": { "key": "value" }
+    }
+  ]
+}"""
+
+
+AUTO_PENTEST_SUMMARY_SCHEMA = """{
+  "summary": "string",
+  "highlights": ["string"],
+  "defensive_actions": ["string"],
+  "offensive_actions": ["string"],
+  "next_steps": ["string"]
+}"""
+
+
+def build_autopentest_plan_messages(target: str, profile: str, goal: str, scope: str | None, notes: str | None) -> List[LLMMessage]:
+    scope_block = scope.strip() if scope else "Не указано"
+    notes_block = notes.strip() if notes else "Нет дополнительных комментариев."
+    schema = AUTO_PENTEST_PLAN_SCHEMA
+    user_prompt = (
+        "Ты — главный пентестер. Построй план Auto Pentest из 5 этапов:\n"
+        "1) llm.audit — сначала проведи LLM аудит веб-приложения (Playwright/Requests).\n"
+        "2) recon/scan — выбери оптимальные сканеры и аргументы (Nmap, Shodan, VirusTotal и т. д.).\n"
+        "3) attack — подбери лучшие векторы (Hydra, SQLMap, Metasploit) с учётом аудита и пожеланий пользователя.\n"
+        "4) report — сформируй общую JSON-сводку (json.report).\n"
+        "5) llm.report — подготовь итоговый отчёт.\n\n"
+        "Используй доступные инструменты:\n"
+        "- intelligence.basic/comprehensive — пассивная разведка\n"
+        "- nmap.* — активные сканы, можно задавать аргументы\n"
+        "- shodan.host / virustotal.ip — точечные запросы\n"
+        "- attack.bruteforce / attack.sqli / attack.metasploit — атаки\n"
+        "- json.report, llm.report — отчётность\n\n"
+        f"Профиль: {profile}. Цель: {target}. Business goal: {goal}. Scope: {scope_block}. Пожелания: {notes_block}\n"
+        "План должен быть реализуем, шагов не больше 8. Ответ строго по JSON-схеме:\n"
+        f"{schema}"
+    )
+
+    return [
+        LLMMessage(
+            role="system",
+            content=(
+                "Ты — Auto Pentester. Придумай план атак и разведки, используя доступные инструменты, "
+                "и верни структурированный JSON."
+            ),
+        ),
+        LLMMessage(role="user", content=user_prompt),
+    ]
+
+
+def build_autopentest_summary_messages(run_payload: Dict[str, Any]) -> List[LLMMessage]:
+    run_json = json.dumps(run_payload, ensure_ascii=False, indent=2)
+    user_prompt = (
+        "Ты — ведущий пентестер. На основе журнала Auto Pentest подготовь краткое резюме работ, "
+        "выдели ключевые успешные/неуспешные шаги и дай советы по защите и дальнейшим атакам. "
+        "Ответ строго по JSON-схеме:\n"
+        f"{AUTO_PENTEST_SUMMARY_SCHEMA}\n\n"
+        "Журнал выполнения:\n"
+        f"```json\n{run_json}\n```"
+    )
+
+    return [
+        LLMMessage(
+            role="system",
+            content=(
+                "Ты — эксперт по безопасности. Сформируй понятный отчёт о ходе автопентеста для CISO и Red Team."
             ),
         ),
         LLMMessage(role="user", content=user_prompt),
