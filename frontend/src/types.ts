@@ -8,10 +8,18 @@ export type ReconFormState = {
     nmap: boolean;
     shodan: boolean;
     virustotal: boolean;
+    subdomains: boolean;
+    technologies: boolean;
+    files: boolean;
+    github: boolean;
+    seo: boolean;
+    dorks: boolean;
   };
   nmapArgs: string;
   shodanQuery: string;
+  googleDork: string;
   virustotalFlags: string;
+  useCache: boolean;
 };
 
 export type AttackFormState = {
@@ -34,6 +42,9 @@ export type LlmFormState = {
   url: string;
   goal: string;
   use_browser: boolean;
+  reconEventId: string;
+  runReconFirst: boolean;
+  useCombinedAudit: boolean;
 };
 
 export type ActionSummary = {

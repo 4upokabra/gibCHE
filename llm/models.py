@@ -50,6 +50,7 @@ class PromptContext:
     scan_goal: str
     previous_findings: Optional[List["ScanFinding"]] = None
     attack_surface: Optional[Dict[str, Any]] = None
+    recon_context: Optional[str] = None
 
 
 @dataclass(slots=True)

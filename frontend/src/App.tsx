@@ -68,10 +68,18 @@ export default function App() {
       nmap: true,
       shodan: true,
       virustotal: true,
+      subdomains: true,
+      technologies: true,
+      files: false,
+      github: true,
+      seo: true,
+      dorks: true,
     },
     nmapArgs: "-sC -sV",
-    shodanQuery: "ssl:true org:\"Example Corp\"",
+    shodanQuery: 'ssl:"example.com"',
+    googleDork: 'site:example.com ext:env OR ext:sql',
     virustotalFlags: "--include-malware --historical",
+    useCache: true,
   });
   const [attackForm, setAttackForm] = useState<AttackFormState>({
     target: "10.10.10.10",
@@ -90,8 +98,11 @@ export default function App() {
   });
   const [llmForm, setLlmForm] = useState<LlmFormState>({
     url: "http://testphp.vulnweb.com",
-    goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты.",
+    goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты с учётом OSINT.",
     use_browser: true,
+    reconEventId: "",
+    runReconFirst: true,
+    useCombinedAudit: true,
   });
   const [isAuthorized, setIsAuthorized] = useState(() => ACCESS_PASS.length === 0);
   const [passwordInput, setPasswordInput] = useState("");
@@ -157,10 +168,15 @@ export default function App() {
         target: reconForm.target,
         target_type: reconForm.targetType,
         comprehensive: reconForm.comprehensive,
-        scanners: reconForm.scanners,
+        use_cache: reconForm.useCache,
+        scanners: {
+          ...reconForm.scanners,
+          files: reconForm.comprehensive ? true : reconForm.scanners.files,
+        },
         overrides: {
           nmap_args: reconForm.nmapArgs,
           shodan_query: reconForm.shodanQuery,
+          google_dork: reconForm.googleDork,
           virustotal_flags: reconForm.virustotalFlags,
         },
       };
@@ -196,13 +212,42 @@ export default function App() {
 
   const handleLLMScan = () =>
     runAction("llm", async () => {
+      if (llmForm.useCombinedAudit) {
+        const target = (() => {
+          try {
+            return new URL(llmForm.url).hostname;
+          } catch {
+            return llmForm.url.replace(/^https?:\/\//, "").split("/")[0];
+          }
+        })();
+        const reconId = llmForm.reconEventId.trim();
+        await apiFetch("/intelligence/llm-audit", {
+          method: "POST",
+          body: JSON.stringify({
+            target,
+            target_type: "domain",
+            url: llmForm.url,
+            goal: llmForm.goal,
+            recon_event_id: reconId || undefined,
+            run_recon: reconId ? false : llmForm.runReconFirst,
+            comprehensive: true,
+            use_browser: llmForm.use_browser,
+          }),
+        });
+        return;
+      }
+
+      const payload: Record<string, unknown> = {
+        url: llmForm.url,
+        goal: llmForm.goal,
+        use_browser: llmForm.use_browser,
+      };
+      if (llmForm.reconEventId.trim()) {
+        payload.recon_event_id = llmForm.reconEventId.trim();
+      }
       await apiFetch("/llm/scan", {
         method: "POST",
-        body: JSON.stringify({
-          url: llmForm.url,
-          goal: llmForm.goal,
-          use_browser: llmForm.use_browser,
-        }),
+        body: JSON.stringify(payload),
       });
     });
 
@@ -236,6 +281,26 @@ export default function App() {
     link.download = filename;
     link.click();
     URL.revokeObjectURL(link.href);
+  };
+
+  const downloadPdfReport = async (item: HistoryItem) => {
+    const eventId = item.event_id || item.scan_id;
+    if (!eventId) {
+      notify({ tone: "error", title: "PDF недоступен", description: "Нет event_id для отчёта" });
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/intelligence/report/${eventId}?format=pdf`);
+      if (!response.ok) throw new Error(await response.text());
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `reconscope_${eventId}.pdf`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      notify({ tone: "error", title: "Ошибка PDF", description: String(error) });
+    }
   };
 
   const detailValue = detailItem && (detailItem.data ?? detailItem);
@@ -449,6 +514,7 @@ export default function App() {
         summaryInfo={summaryInfo}
         onClose={() => setDetailItem(null)}
         onDownload={downloadResult}
+        onDownloadPdf={downloadPdfReport}
       />
 
       <ToastStack toastList={toastList} />
