@@ -111,3 +111,7 @@ class NmapScanner:
     async def full_scan(self, target: str) -> Dict[str, Any]:
         """Полное сканирование"""
         return await self.scan_target(target, "-p- -sV -T4")
+
+    async def vuln_scan(self, target: str) -> Dict[str, Any]:
+        """Сканирование известных уязвимостей через NSE-скрипты vuln"""
+        return await self.scan_target(target, "-sV --script vuln -T4")

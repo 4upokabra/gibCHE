@@ -41,6 +41,12 @@ def build_scan_summary(data: Any) -> SummaryPayload:
         summary_parts.append(vt_data["summary"])
         defensive.extend(vt_data["defensive"])
 
+    web_data = _extract_web_recon_data(data)
+    if web_data:
+        summary_parts.append(web_data["summary"])
+        defensive.extend(web_data["defensive"])
+        offensive.extend(web_data.get("offensive", []))
+
     if not summary_parts:
         summary_parts.append("Сканирование завершено, подробности в отчёте.")
 
@@ -97,6 +103,47 @@ def build_attack_summary(data: Any) -> SummaryPayload:
     }
 
     return summary, action_summary
+
+
+def _extract_web_recon_data(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    source = data.get("source")
+
+    if source == "xss_recon":
+        reflected = [item for item in data.get("reflected", []) if "evidence" in item]
+        if data.get("vulnerable"):
+            params = ", ".join(item["param"] for item in reflected)
+            return {
+                "summary": f"XSS-разведка: возможна отражённая XSS через параметры: {params}.",
+                "defensive": ["Экранируйте/валидируйте пользовательский ввод перед выводом в HTML."],
+                "offensive": ["Запустите attack.xss_exploit для подтверждения и сбора PoC."],
+            }
+        return {
+            "summary": f"XSS-разведка: отражений не найдено ({len(data.get('tested_params', []))} параметров проверено).",
+            "defensive": [],
+            "offensive": [],
+        }
+
+    if source == "dirfuzz":
+        found = data.get("found", [])
+        if found:
+            return {
+                "summary": f"Dirfuzz: обнаружено {len(found)} путей (например, {found[0].get('path')}).",
+                "defensive": ["Закройте доступ к служебным путям/файлам, ограничьте листинг директорий."],
+                "offensive": ["Изучите найденные пути на предмет дальнейших атак (SQLi, traversal, утечки конфигов)."],
+            }
+        return {"summary": "Dirfuzz: скрытых путей не обнаружено.", "defensive": [], "offensive": []}
+
+    if source == "nikto":
+        findings = data.get("findings", [])
+        if findings:
+            return {
+                "summary": f"Nikto: найдено {len(findings)} потенциальных проблем конфигурации.",
+                "defensive": ["Изучите находки Nikto и устраните мисконфигурации веб-сервера."],
+                "offensive": ["Используйте находки Nikto как наводки для целевых атак."],
+            }
+        return {"summary": "Nikto: проблем не выявлено.", "defensive": [], "offensive": []}
+
+    return None
 
 
 def _count_open_ports(hosts: Dict[str, Any]) -> int:

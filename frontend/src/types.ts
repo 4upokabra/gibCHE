@@ -29,6 +29,9 @@ export type AttackFormState = {
   metasploitPayload: string;
   metasploitOptions: string;
   sqlmapFlags: string;
+  injectionParam: string;
+  injectionPayloads: string;
+  traversalFile: string;
   label: string;
 };
 

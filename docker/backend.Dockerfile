@@ -14,6 +14,8 @@ RUN apt-get update && \
       nmap \
       hydra \
       sqlmap \
+      nikto \
+      gobuster \
       netcat-openbsd \
       ca-certificates && \
     rm -rf /var/lib/apt/lists/*

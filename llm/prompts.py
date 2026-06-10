@@ -133,7 +133,7 @@ AUTO_PENTEST_PLAN_SCHEMA = """{
     {
       "id": "string",
       "kind": "audit|recon|scan|attack|report",
-      "method": "llm.audit|intelligence.basic|nmap.quick|nmap.full|nmap.custom|shodan.host|virustotal.ip|attack.bruteforce|attack.sqli|attack.metasploit|json.report|llm.report",
+      "method": "llm.audit|intelligence.basic|nmap.quick|nmap.full|nmap.custom|nmap.vuln|shodan.host|virustotal.ip|web.xss_scan|web.dirfuzz|web.nikto|attack.bruteforce|attack.sqli|attack.metasploit|attack.xss_exploit|attack.command_injection|attack.path_traversal|json.report|llm.report",
       "args": { "key": "value" }
     }
   ]
@@ -156,15 +156,22 @@ def build_autopentest_plan_messages(target: str, profile: str, goal: str, scope:
     user_prompt = (
         "Ты — главный пентестер. Построй план Auto Pentest из 5 этапов:\n"
         "1) llm.audit — сначала проведи LLM аудит веб-приложения (Playwright/Requests).\n"
-        "2) recon/scan — выбери оптимальные сканеры и аргументы (Nmap, Shodan, VirusTotal и т. д.).\n"
-        "3) attack — подбери лучшие векторы (Hydra, SQLMap, Metasploit) с учётом аудита и пожеланий пользователя.\n"
+        "2) recon/scan — выбери оптимальные сканеры и аргументы (Nmap, Shodan, VirusTotal, web.xss_scan, web.dirfuzz, web.nikto, nmap.vuln и т. д.).\n"
+        "3) attack — подбери лучшие векторы (Hydra, SQLMap, Metasploit, XSS, command injection, path traversal) с учётом аудита, разведки и пожеланий пользователя.\n"
         "4) report — сформируй общую JSON-сводку (json.report).\n"
         "5) llm.report — подготовь итоговый отчёт.\n\n"
         "Используй доступные инструменты:\n"
         "- intelligence.basic/comprehensive — пассивная разведка\n"
-        "- nmap.* — активные сканы, можно задавать аргументы\n"
+        "- nmap.quick / nmap.full / nmap.custom — активные сканы, можно задавать аргументы\n"
+        "- nmap.vuln — поиск известных уязвимостей через NSE-скрипты vuln\n"
         "- shodan.host / virustotal.ip — точечные запросы\n"
-        "- attack.bruteforce / attack.sqli / attack.metasploit — атаки\n"
+        "- web.xss_scan — разведка отражённого XSS (поиск уязвимых параметров)\n"
+        "- web.dirfuzz — поиск скрытых директорий/файлов (gobuster)\n"
+        "- web.nikto — проверка веб-сервера на типовые мисконфигурации (Nikto)\n"
+        "- attack.bruteforce / attack.sqli / attack.metasploit — атаки на сервисы и эксплойты\n"
+        "- attack.xss_exploit — эксплуатация отражённого XSS, найденного на разведке\n"
+        "- attack.command_injection — проверка/эксплуатация OS command injection\n"
+        "- attack.path_traversal — эксплуатация Path Traversal/LFI для чтения файлов\n"
         "- json.report, llm.report — отчётность\n\n"
         f"Профиль: {profile}. Цель: {target}. Business goal: {goal}. Scope: {scope_block}. Пожелания: {notes_block}\n"
         "План должен быть реализуем, шагов не больше 8. Ответ строго по JSON-схеме:\n"

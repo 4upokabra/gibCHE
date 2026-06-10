@@ -72,6 +72,10 @@ export function CommandHub({
   const isBruteforce = attackForm.attackType === "bruteforce";
   const isMetasploit = attackForm.attackType === "metasploit";
   const isSQLi = attackForm.attackType === "sqli";
+  const isXssExploit = attackForm.attackType === "xss_exploit";
+  const isCommandInjection = attackForm.attackType === "command_injection";
+  const isPathTraversal = attackForm.attackType === "path_traversal";
+  const isInjectionVector = isXssExploit || isCommandInjection || isPathTraversal;
   const scannerOptions = [
     { key: "nmap", label: "Nmap", description: "Активное сканирование", icon: Radar },
     { key: "shodan", label: "Shodan", description: "Поиск по сети", icon: Shuffle },
@@ -307,6 +311,9 @@ export function CommandHub({
                 <option value="sqli">SQLMap</option>
                 <option value="metasploit">Metasploit</option>
                 <option value="legacy_audit">Legacy Audit</option>
+                <option value="xss_exploit">XSS Exploit</option>
+                <option value="command_injection">Command Injection</option>
+                <option value="path_traversal">Path Traversal / LFI</option>
               </select>
             </label>
             <label className="block space-y-2 md:col-span-1">
@@ -430,6 +437,56 @@ export function CommandHub({
               />
               <p className="text-xs text-slate-500">
                 Флаги будут переданы в sqlmap как есть. Используйте их для кастомизации времени запроса, тамперов и т.д.
+              </p>
+            </div>
+          )}
+
+          {isInjectionVector && (
+            <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-400">
+                <SlidersHorizontal className="h-4 w-4 text-rose-300" />
+                Параметры инъекции
+              </div>
+              <label className="block space-y-2">
+                <span className={labelClass}>Параметр для инъекции</span>
+                <input
+                  className={inputClass}
+                  value={attackForm.injectionParam}
+                  onChange={(e) => setAttackForm((prev) => ({ ...prev, injectionParam: e.target.value }))}
+                  placeholder="q"
+                />
+              </label>
+              {(isXssExploit || isCommandInjection) && (
+                <label className="block space-y-2">
+                  <span className={labelClass}>Свои payload'ы (comma / newline, опционально)</span>
+                  <textarea
+                    className={textareaClass}
+                    rows={3}
+                    value={attackForm.injectionPayloads}
+                    onChange={(e) => setAttackForm((prev) => ({ ...prev, injectionPayloads: e.target.value }))}
+                    placeholder={
+                      isXssExploit
+                        ? "<script>alert(document.domain)</script>"
+                        : ";id\n|whoami"
+                    }
+                  />
+                </label>
+              )}
+              {isPathTraversal && (
+                <label className="block space-y-2">
+                  <span className={labelClass}>Целевой файл</span>
+                  <input
+                    className={inputClass}
+                    value={attackForm.traversalFile}
+                    onChange={(e) => setAttackForm((prev) => ({ ...prev, traversalFile: e.target.value }))}
+                    placeholder="etc/passwd"
+                  />
+                </label>
+              )}
+              <p className="text-xs text-slate-500">
+                {isXssExploit && "Набор payload'ов будет подставлен в указанный параметр URL, проверяется отражение без экранирования."}
+                {isCommandInjection && "Проверяются output- и time-based payload'ы для обнаружения OS command injection."}
+                {isPathTraversal && "Перебираются варианты traversal-путей для чтения указанного файла через параметр."}
               </p>
             </div>
           )}
@@ -590,8 +647,10 @@ export function CommandHub({
           </label>
 
           <div className="rounded-3xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-400">
-            «Auto Pentest» создаёт пошаговый план (разведка → атаки → отчёт) и запускает встроенные инструменты. История
-            и прогресс появятся в ленте событий.
+            «Auto Pentest» создаёт пошаговый план (разведка → атаки → отчёт) и запускает встроенные инструменты:
+            Nmap (включая vuln-скрипты), Shodan, VirusTotal, XSS-разведку, Dirfuzz (gobuster), Nikto, а также атаки
+            Hydra, SQLMap, Metasploit, XSS Exploit, Command Injection и Path Traversal/LFI. История и прогресс
+            появятся в ленте событий.
           </div>
 
           <button
