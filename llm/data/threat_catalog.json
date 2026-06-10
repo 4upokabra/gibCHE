@@ -1,0 +1,122 @@
+{
+  "version": "2024-11-01",
+  "source": "Сводная база: БДУ ФСТЭК (https://bdu.fstec.ru) и MITRE/NVD",
+  "items": [
+    {
+      "name": "SQL Injection (CWE-89)",
+      "keywords": [
+        "sql injection",
+        "sql-инъекция",
+        "инъекции sql",
+        "database injection"
+      ],
+      "cwe_ids": ["CWE-89"],
+      "cve_ids": ["CVE-2023-34362"],
+      "bdu_ids": ["БДУ.ФСТЭК.1.00145"],
+      "threat_ids": ["УБИ.0001"],
+      "weight": 1.2
+    },
+    {
+      "name": "Cross-Site Scripting (CWE-79)",
+      "keywords": [
+        "xss",
+        "cross site scripting",
+        "межсайтовый скриптинг",
+        "скриптовая инъекция"
+      ],
+      "cwe_ids": ["CWE-79"],
+      "cve_ids": ["CVE-2022-39328"],
+      "bdu_ids": ["БДУ.ФСТЭК.1.00987"],
+      "threat_ids": ["УБИ.0005"],
+      "weight": 1.0
+    },
+    {
+      "name": "Path Traversal (CWE-22)",
+      "keywords": [
+        "path traversal",
+        "directory traversal",
+        "выход за пределы каталога",
+        "файл ../"
+      ],
+      "cwe_ids": ["CWE-22"],
+      "cve_ids": ["CVE-2021-41773"],
+      "bdu_ids": ["БДУ.ФСТЭК.1.00421"],
+      "threat_ids": ["УБИ.0021"],
+      "weight": 1.0
+    },
+    {
+      "name": "Weak Authentication (CWE-287)",
+      "keywords": [
+        "weak authentication",
+        "недостаточная аутентификация",
+        "пароль по умолчанию",
+        "default credentials"
+      ],
+      "cwe_ids": ["CWE-287"],
+      "cve_ids": ["CVE-2020-3452"],
+      "bdu_ids": ["БДУ.ФСТЭК.1.00234"],
+      "threat_ids": ["УБИ.0009"],
+      "weight": 0.9
+    },
+    {
+      "name": "Sensitive Data Exposure (CWE-200)",
+      "keywords": [
+        "sensitive data exposure",
+        "утечка конфиденциальных данных",
+        "information disclosure",
+        "exposes sensitive"
+      ],
+      "cwe_ids": ["CWE-200"],
+      "cve_ids": ["CVE-2023-23924"],
+      "bdu_ids": ["БДУ.ФСТЭК.1.00673"],
+      "threat_ids": ["УБИ.0013"],
+      "weight": 0.8
+    },
+    {
+      "name": "Improper Error Handling (CWE-209)",
+      "keywords": [
+        "500 internal server error",
+        "internal server error",
+        "ошибка сервера",
+        "error disclosure",
+        "stack trace"
+      ],
+      "cwe_ids": ["CWE-209"],
+      "cve_ids": [],
+      "bdu_ids": ["БДУ.ФСТЭК.1.01045"],
+      "threat_ids": ["УБИ.0032"],
+      "weight": 0.9
+    },
+    {
+      "name": "Missing Security Headers (CWE-693)",
+      "keywords": [
+        "отсутствие заголовков безопасности",
+        "missing security headers",
+        "content-security-policy",
+        "x-content-type-options",
+        "x-frame-options",
+        "https отсутствует"
+      ],
+      "cwe_ids": ["CWE-693"],
+      "cve_ids": [],
+      "bdu_ids": ["БДУ.ФСТЭК.1.01234"],
+      "threat_ids": ["УБИ.0044"],
+      "weight": 1.1
+    },
+    {
+      "name": "Cross-Site Request Forgery (CWE-352)",
+      "keywords": [
+        "csrf",
+        "cross-site request forgery",
+        "подделка межсайтовых запросов",
+        "token csrf отсутствует"
+      ],
+      "cwe_ids": ["CWE-352"],
+      "cve_ids": ["CVE-2021-41281"],
+      "bdu_ids": ["БДУ.ФСТЭК.1.00789"],
+      "threat_ids": ["УБИ.0024"],
+      "weight": 1.0
+    }
+  ]
+}
+

@@ -1,0 +1,15 @@
+{
+  "target": "146.103.121.226",
+  "vector": "bruteforce",
+  "status": "dry_run",
+  "success": true,
+  "details": "Команда сформирована, выполнение не запускалось.",
+  "artifacts": {
+    "command": "/usr/bin/hydra -L data/wordlists/users.txt -P data/wordlists/passwords.txt -t 4 -s 22 ssh://146.103.121.226"
+  },
+  "evidence": {},
+  "profile": "black_box",
+  "dry_run": true,
+  "sla": null,
+  "matched_vulns": []
+}

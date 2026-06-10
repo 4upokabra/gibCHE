@@ -1,0 +1,17 @@
+{
+  "target": "testphp.vulnweb.com",
+  "vector": "bruteforce",
+  "status": "failed",
+  "success": false,
+  "details": "Hydra завершилась с кодом 255",
+  "artifacts": {
+    "command": "/usr/bin/hydra -L data/wordlists/users.txt -P data/wordlists/passwords.txt -t 4 -s 22 ssh://testphp.vulnweb.com",
+    "stdout": "Hydra v9.5 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).\n\nHydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2025-11-15 23:52:13\n[DATA] max 4 tasks per 1 server, overall 4 tasks, 36 login tries (l:6/p:6), ~9 tries per task\n[DATA] attacking ssh://testphp.vulnweb.com:22/\n",
+    "stderr": "[ERROR] could not connect to ssh://44.228.249.3:22 - Timeout connecting to 44.228.249.3\n"
+  },
+  "evidence": {},
+  "profile": "black_box",
+  "dry_run": false,
+  "sla": null,
+  "matched_vulns": []
+}

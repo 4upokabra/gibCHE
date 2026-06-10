@@ -1,0 +1,17 @@
+{
+  "target": "scanme.nmap.org",
+  "vector": "bruteforce",
+  "status": "completed",
+  "success": true,
+  "details": "Hydra завершилась успешно",
+  "artifacts": {
+    "command": "/usr/bin/hydra -L data/wordlists/users.txt -P data/wordlists/passwords.txt -t 4 -s 22 ssh://scanme.nmap.org",
+    "stdout": "Hydra v9.5 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).\n\nHydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2025-11-15 22:56:53\n[DATA] max 4 tasks per 1 server, overall 4 tasks, 36 login tries (l:6/p:6), ~9 tries per task\n[DATA] attacking ssh://scanme.nmap.org:22/\n1 of 1 target completed, 0 valid password found\nHydra (https://github.com/vanhauser-thc/thc-hydra) finished at 2025-11-15 22:57:17\n",
+    "stderr": ""
+  },
+  "evidence": {},
+  "profile": "black_box",
+  "dry_run": false,
+  "sla": null,
+  "matched_vulns": []
+}

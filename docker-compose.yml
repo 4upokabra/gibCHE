@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: intelligence_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/intelligence_db
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      MSFRPC_URL: ${MSFRPC_URL:-http://metasploit:55553/api/}
+      MSFRPC_TOKEN: ${MSFRPC_TOKEN:-}
+      MSFRPC_USER: ${MSFRPC_USER:-}
+      MSFRPC_PASS: ${MSFRPC_PASS:-}
+    volumes:
+      - ./data:/app/data:ro
+      - ./artifacts:/app/artifacts
+      - ./logs:/app/logs
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+        VITE_ACCESS_PASS: ${VITE_ACCESS_PASS:-}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "417:80"
+
+volumes:
+  postgres_data:
+

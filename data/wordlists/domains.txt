@@ -1,0 +1,5 @@
+corp.local
+intranet.local
+prod.local
+stage.local
+

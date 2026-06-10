@@ -1,0 +1,15 @@
+{
+  "target": "146.103.121.226",
+  "vector": "sqli",
+  "status": "dry_run",
+  "success": true,
+  "details": "sqlmap не запускался (dry-run или бинарь отсутствует).",
+  "artifacts": {
+    "command": "/usr/bin/sqlmap -u 146.103.121.226 --batch --level=2 --risk=1 --random-agent"
+  },
+  "evidence": {},
+  "profile": "black_box",
+  "dry_run": true,
+  "sla": null,
+  "matched_vulns": []
+}

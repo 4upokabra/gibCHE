@@ -1,0 +1,35 @@
+[
+  {
+    "product": "Apache HTTP Server",
+    "pattern": "Apache/2.4.49",
+    "cves": ["CVE-2021-41773", "CVE-2021-42013"],
+    "metasploit_module": "exploit/multi/http/apache_normalize_path",
+    "severity": "critical",
+    "notes": "Path traversal + RCE при включённом mod_cgi."
+  },
+  {
+    "product": "Microsoft Exchange",
+    "pattern": "X-OWA-Version: 15.0.1497.2",
+    "cves": ["CVE-2021-26855", "CVE-2021-27065"],
+    "metasploit_module": "exploit/windows/http/exchange_proxylogon_rce",
+    "severity": "critical",
+    "notes": "ProxyLogon SSRF/RCE цепочка."
+  },
+  {
+    "product": "Confluence Server",
+    "pattern": "Atlassian Confluence 7.4.0",
+    "cves": ["CVE-2021-26084"],
+    "metasploit_module": "exploit/multi/http/atlassian_confluence_webwork",
+    "severity": "high",
+    "notes": "OGNL injection в WebWork."
+  },
+  {
+    "product": "OpenSSH",
+    "pattern": "OpenSSH_7.2p2",
+    "cves": ["CVE-2016-0777"],
+    "metasploit_module": null,
+    "severity": "medium",
+    "notes": "Roaming информация — утечка приватных ключей."
+  }
+]
+

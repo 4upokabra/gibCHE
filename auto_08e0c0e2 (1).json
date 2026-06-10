@@ -1,0 +1,258 @@
+{
+  "event_id": "auto_08e0c0e2",
+  "type": "autopentest",
+  "status": "failed",
+  "target": "http://testphp.vulnweb.com",
+  "profile": "black_box",
+  "goal": "Построить цепочку атак и подготовить отчёт.",
+  "scope": "",
+  "plan": {
+    "objective": "Построить цепочку атак и подготовить отчёт для цели http://testphp.vulnweb.com",
+    "steps": [
+      {
+        "id": "step1",
+        "kind": "recon",
+        "method": "intelligence.basic",
+        "args": {
+          "target": "http://testphp.vulnweb.com"
+        },
+        "status": "completed",
+        "output": {
+          "data": {
+            "error": "Invalid target: http://testphp.vulnweb.com for type: ip"
+          },
+          "summary": "Сканирование завершено, подробности в отчёте.",
+          "action_summary": {
+            "changes": "Сканирование выполнено",
+            "defensive_actions": [],
+            "offensive_actions": [
+              "Запланируйте повторное сканирование после внедрения защитных мер."
+            ]
+          }
+        },
+        "error": null
+      },
+      {
+        "id": "step2",
+        "kind": "scan",
+        "method": "nmap.quick",
+        "args": {
+          "target": "testphp.vulnweb.com",
+          "ports": "80,443"
+        },
+        "status": "completed",
+        "output": {
+          "data": {
+            "source": "nmap",
+            "target": "http://testphp.vulnweb.com",
+            "arguments": "-F -T4",
+            "hosts": {}
+          },
+          "summary": "Сканирование завершено, подробности в отчёте.",
+          "action_summary": {
+            "changes": "Сканирование выполнено",
+            "defensive_actions": [],
+            "offensive_actions": [
+              "Запланируйте повторное сканирование после внедрения защитных мер."
+            ]
+          }
+        },
+        "error": null
+      },
+      {
+        "id": "step3",
+        "kind": "recon",
+        "method": "shodan.host",
+        "args": {
+          "ip": "testphp.vulnweb.com"
+        },
+        "status": "completed",
+        "output": {
+          "data": {
+            "error": "Shodan API error: Unable to parse JSON response"
+          },
+          "summary": "Сканирование завершено, подробности в отчёте.",
+          "action_summary": {
+            "changes": "Сканирование выполнено",
+            "defensive_actions": [],
+            "offensive_actions": [
+              "Запланируйте повторное сканирование после внедрения защитных мер."
+            ]
+          }
+        },
+        "error": null
+      },
+      {
+        "id": "step4",
+        "kind": "recon",
+        "method": "virustotal.ip",
+        "args": {
+          "ip": "testphp.vulnweb.com"
+        },
+        "status": "completed",
+        "output": {
+          "data": {
+            "error": "VirusTotal request failed: 404 Client Error: Not Found for url: https://www.virustotal.com/api/v3/ip_addresses/http://testphp.vulnweb.com"
+          },
+          "summary": "Сканирование завершено, подробности в отчёте.",
+          "action_summary": {
+            "changes": "Сканирование выполнено",
+            "defensive_actions": [],
+            "offensive_actions": [
+              "Запланируйте повторное сканирование после внедрения защитных мер."
+            ]
+          }
+        },
+        "error": null
+      },
+      {
+        "id": "step5",
+        "kind": "attack",
+        "method": "attack.sqli",
+        "args": {
+          "url": "http://testphp.vulnweb.com"
+        },
+        "status": "completed",
+        "output": {
+          "event": {
+            "event_id": "atk_bruteforce_396a2f36",
+            "type": "attack.bruteforce",
+            "source": "hydra_bruteforce",
+            "timestamp": "2025-11-15T22:01:02.589801",
+            "data": {
+              "target": "http://testphp.vulnweb.com",
+              "vector": "bruteforce",
+              "status": "failed",
+              "success": false,
+              "details": "Hydra завершилась с кодом 255",
+              "artifacts": {
+                "command": "/usr/bin/hydra -L data/wordlists/users.txt -P data/wordlists/passwords.txt -t 4 -s 22 ssh://http://testphp.vulnweb.com",
+                "stdout": "Hydra v9.5 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).\n\nHydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2025-11-15 22:01:02\n[DATA] max 4 tasks per 1 server, overall 4 tasks, 36 login tries (l:6/p:6), ~9 tries per task\n[DATA] attacking ssh://http:22/testphp.vulnweb.com\n",
+                "stderr": "[ERROR] could not resolve address: http\n[ERROR] could not connect to ssh://(null):22 - Hostname required\n"
+              },
+              "evidence": {},
+              "profile": "black_box",
+              "dry_run": false,
+              "sla": null,
+              "matched_vulns": []
+            }
+          },
+          "summary": "Атака bruteforce на http://testphp.vulnweb.com завершилась статусом failed.",
+          "action_summary": {
+            "changes": "Hydra завершилась с кодом 255",
+            "defensive_actions": [],
+            "offensive_actions": [
+              "Команда запуска сохранена в артефактах: `/usr/bin/hydra -L data/wordlists/users.txt -P data/wordlists/passwords.txt -t 4 ...`",
+              "Повторите атаку после корректировки параметров или профиля."
+            ]
+          }
+        },
+        "error": null
+      },
+      {
+        "id": "step6",
+        "kind": "attack",
+        "method": "attack.bruteforce",
+        "args": {
+          "url": "http://testphp.vulnweb.com/login.php",
+          "wordlist": "common_passwords.txt"
+        },
+        "status": "completed",
+        "output": {
+          "event": {
+            "event_id": "atk_bruteforce_4f2066c3",
+            "type": "attack.bruteforce",
+            "source": "hydra_bruteforce",
+            "timestamp": "2025-11-15T22:01:02.641292",
+            "data": {
+              "target": "http://testphp.vulnweb.com",
+              "vector": "bruteforce",
+              "status": "failed",
+              "success": false,
+              "details": "Hydra завершилась с кодом 255",
+              "artifacts": {
+                "command": "/usr/bin/hydra -L data/wordlists/users.txt -P data/wordlists/passwords.txt -t 4 -s 22 ssh://http://testphp.vulnweb.com",
+                "stdout": "Hydra v9.5 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).\n\nHydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2025-11-15 22:01:02\n[DATA] max 4 tasks per 1 server, overall 4 tasks, 36 login tries (l:6/p:6), ~9 tries per task\n[DATA] attacking ssh://http:22/testphp.vulnweb.com\n",
+                "stderr": "[ERROR] could not resolve address: http\n[ERROR] could not connect to ssh://(null):22 - Hostname required\n"
+              },
+              "evidence": {},
+              "profile": "black_box",
+              "dry_run": false,
+              "sla": null,
+              "matched_vulns": []
+            }
+          },
+          "summary": "Атака bruteforce на http://testphp.vulnweb.com завершилась статусом failed.",
+          "action_summary": {
+            "changes": "Hydra завершилась с кодом 255",
+            "defensive_actions": [],
+            "offensive_actions": [
+              "Команда запуска сохранена в артефактах: `/usr/bin/hydra -L data/wordlists/users.txt -P data/wordlists/passwords.txt -t 4 ...`",
+              "Повторите атаку после корректировки параметров или профиля."
+            ]
+          }
+        },
+        "error": null
+      },
+      {
+        "id": "step7",
+        "kind": "attack",
+        "method": "attack.metasploit",
+        "args": {
+          "exploit": "exploit/multi/http/testphp_vulnweb",
+          "payload": "payload/php/meterpreter/reverse_tcp",
+          "target": "testphp.vulnweb.com"
+        },
+        "status": "completed",
+        "output": {
+          "event": {
+            "event_id": "atk_bruteforce_c3c04037",
+            "type": "attack.bruteforce",
+            "source": "hydra_bruteforce",
+            "timestamp": "2025-11-15T22:01:02.689302",
+            "data": {
+              "target": "http://testphp.vulnweb.com",
+              "vector": "bruteforce",
+              "status": "failed",
+              "success": false,
+              "details": "Hydra завершилась с кодом 255",
+              "artifacts": {
+                "command": "/usr/bin/hydra -L data/wordlists/users.txt -P data/wordlists/passwords.txt -t 4 -s 22 ssh://http://testphp.vulnweb.com",
+                "stdout": "Hydra v9.5 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).\n\nHydra (https://github.com/vanhauser-thc/thc-hydra) starting at 2025-11-15 22:01:02\n[DATA] max 4 tasks per 1 server, overall 4 tasks, 36 login tries (l:6/p:6), ~9 tries per task\n[DATA] attacking ssh://http:22/testphp.vulnweb.com\n",
+                "stderr": "[ERROR] could not resolve address: http\n[ERROR] could not connect to ssh://(null):22 - Hostname required\n"
+              },
+              "evidence": {},
+              "profile": "black_box",
+              "dry_run": false,
+              "sla": null,
+              "matched_vulns": []
+            }
+          },
+          "summary": "Атака bruteforce на http://testphp.vulnweb.com завершилась статусом failed.",
+          "action_summary": {
+            "changes": "Hydra завершилась с кодом 255",
+            "defensive_actions": [],
+            "offensive_actions": [
+              "Команда запуска сохранена в артефактах: `/usr/bin/hydra -L data/wordlists/users.txt -P data/wordlists/passwords.txt -t 4 ...`",
+              "Повторите атаку после корректировки параметров или профиля."
+            ]
+          }
+        },
+        "error": null
+      },
+      {
+        "id": "step8",
+        "kind": "report",
+        "method": "llm.report",
+        "args": {
+          "findings": "all",
+          "format": "pdf"
+        },
+        "status": "failed",
+        "output": null,
+        "error": "Не удалось загрузить страницу http://http://testphp.vulnweb.com"
+      }
+    ]
+  },
+  "summary": null
+}
