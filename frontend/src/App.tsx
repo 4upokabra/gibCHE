@@ -6,7 +6,7 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { AuthOverlay } from "./components/AuthOverlay";
 import { ToastStack } from "./components/ToastStack";
-import type { ActionSummary, LlmReport } from "./types";
+import type { ActionSummary, AutoPentestForm, LlmReport } from "./types";
 import {
   AttackFormState,
   FilterState,
@@ -75,10 +75,18 @@ export default function App() {
       nmap: true,
       shodan: true,
       virustotal: true,
+      subdomains: true,
+      technologies: true,
+      files: false,
+      github: true,
+      seo: true,
+      dorks: true,
     },
     nmapArgs: "-sC -sV",
-    shodanQuery: "ssl:true org:\"Example Corp\"",
+    shodanQuery: 'ssl:"example.com"',
+    googleDork: 'site:example.com ext:env OR ext:sql',
     virustotalFlags: "--include-malware --historical",
+    useCache: true,
     label: "",
   });
   const [attackForm, setAttackForm] = useState<AttackFormState>({
@@ -105,8 +113,11 @@ export default function App() {
   });
   const [llmForm, setLlmForm] = useState<LlmFormState>({
     url: "http://testphp.vulnweb.com",
-    goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты.",
+    goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты с учётом OSINT.",
     use_browser: true,
+    reconEventId: "",
+    runReconFirst: true,
+    useCombinedAudit: true,
     label: "",
   });
   const [autopentestForm, setAutopentestForm] = useState<AutoPentestForm>({
@@ -186,10 +197,15 @@ export default function App() {
         target: reconForm.target,
         target_type: reconForm.targetType,
         comprehensive: reconForm.comprehensive,
-        scanners: reconForm.scanners,
+        use_cache: reconForm.useCache,
+        scanners: {
+          ...reconForm.scanners,
+          files: reconForm.comprehensive ? true : reconForm.scanners.files,
+        },
         overrides: {
           nmap_args: reconForm.nmapArgs,
           shodan_query: reconForm.shodanQuery,
+          google_dork: reconForm.googleDork,
           virustotal_flags: reconForm.virustotalFlags,
         },
         label: label || undefined,
@@ -243,14 +259,44 @@ export default function App() {
   const handleLLMScan = () =>
     runAction("llm", async () => {
       const label = llmForm.label.trim();
+      if (llmForm.useCombinedAudit) {
+        const target = (() => {
+          try {
+            return new URL(llmForm.url).hostname;
+          } catch {
+            return llmForm.url.replace(/^https?:\/\//, "").split("/")[0];
+          }
+        })();
+        const reconId = llmForm.reconEventId.trim();
+        await apiFetch("/intelligence/llm-audit", {
+          method: "POST",
+          body: JSON.stringify({
+            target,
+            target_type: "domain",
+            url: llmForm.url,
+            goal: llmForm.goal,
+            recon_event_id: reconId || undefined,
+            run_recon: reconId ? false : llmForm.runReconFirst,
+            comprehensive: true,
+            use_browser: llmForm.use_browser,
+            label: label || undefined,
+          }),
+        });
+        return;
+      }
+
+      const payload: Record<string, unknown> = {
+        url: llmForm.url,
+        goal: llmForm.goal,
+        use_browser: llmForm.use_browser,
+        label: label || undefined,
+      };
+      if (llmForm.reconEventId.trim()) {
+        payload.recon_event_id = llmForm.reconEventId.trim();
+      }
       await apiFetch("/llm/scan", {
         method: "POST",
-        body: JSON.stringify({
-          url: llmForm.url,
-          goal: llmForm.goal,
-          use_browser: llmForm.use_browser,
-          label: label || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
     });
 
@@ -328,6 +374,26 @@ export default function App() {
       fetchHistory();
     } catch (error) {
       notify({ tone: "error", title: "Не удалось обновить задачу", description: String(error) });
+    }
+  };
+
+  const downloadPdfReport = async (item: HistoryItem) => {
+    const eventId = item.event_id || item.scan_id;
+    if (!eventId) {
+      notify({ tone: "error", title: "PDF недоступен", description: "Нет event_id для отчёта" });
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/intelligence/report/${eventId}?format=pdf`);
+      if (!response.ok) throw new Error(await response.text());
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `reconscope_${eventId}.pdf`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      notify({ tone: "error", title: "Ошибка PDF", description: String(error) });
     }
   };
 
@@ -547,6 +613,7 @@ export default function App() {
         summaryInfo={summaryInfo}
         onClose={() => setDetailItem(null)}
         onDownload={downloadResult}
+        onDownloadPdf={downloadPdfReport}
       />
 
       <ToastStack toastList={toastList} />

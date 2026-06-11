@@ -25,6 +25,12 @@ from .models import (
 from .postprocessing import PostProcessingError, build_action_summary, build_scan_report
 from .processing import ProcessingOptions, build_structured_page
 from .prompts import build_action_summary_messages, build_scan_messages
+from .recon_context import (
+    build_attack_surface,
+    extract_allowed_domains,
+    extract_crawl_seeds,
+    format_recon_for_llm,
+)
 
 
 @dataclass(slots=True)
@@ -34,6 +40,7 @@ class CrawlOptions:
     same_domain_only: bool = True
     delay_between_requests: float = 0.0
     allowed_domains: Optional[Set[str]] = None
+    seed_urls: Optional[List[str]] = None
 
 
 @dataclass(slots=True)
@@ -67,9 +74,21 @@ class LLMScannerPipeline:
         url: str,
         scan_goal: str,
         options: Optional[ScanOptions] = None,
+        recon_data: Optional[Dict] = None,
     ) -> ScanReport:
         options = options or ScanOptions()
         fetcher = self.browser_fetcher if options.use_browser else self.http_fetcher
+
+        recon_block: Optional[str] = None
+        attack_surface: Optional[Dict] = None
+        if recon_data:
+            recon_block = format_recon_for_llm(recon_data)
+            attack_surface = build_attack_surface(recon_data)
+            seeds = extract_crawl_seeds(recon_data, url)
+            if seeds:
+                options.crawl.seed_urls = seeds
+                options.crawl.max_pages = min(max(options.crawl.max_pages, len(seeds)), 10)
+            options.crawl.allowed_domains = extract_allowed_domains(recon_data, url)
 
         page_contents, depth_map = await self._crawl_site(
             fetcher=fetcher,
@@ -90,6 +109,8 @@ class LLMScannerPipeline:
         prompt_context = PromptContext(
             structured_page=aggregated_page,
             scan_goal=scan_goal,
+            attack_surface=attack_surface,
+            recon_context=recon_block,
         )
 
         messages = build_scan_messages(prompt_context)
@@ -102,10 +123,19 @@ class LLMScannerPipeline:
             response_format="json",
         )
         raw_response = await self.llm_client.complete(llm_request)
+        report_metadata = dict(aggregated_page.metadata)
+        if recon_data:
+            report_metadata["recon_target"] = str(recon_data.get("target", ""))
+            report_metadata["recon_summary"] = str(recon_data.get("summary", ""))[:500]
+            if recon_data.get("threat_intel", {}).get("risk_score") is not None:
+                report_metadata["recon_threat_score"] = str(
+                    recon_data["threat_intel"]["risk_score"]
+                )
+
         report = build_scan_report(
             raw_response=raw_response,
             url=page_contents[0].url if page_contents else url,
-            metadata=aggregated_page.metadata,
+            metadata=report_metadata,
         )
         report = enrich_report(report, self.knowledge_base)
 
@@ -132,6 +162,12 @@ class LLMScannerPipeline:
             raise FetchError("crawl.max_pages must be at least 1")
 
         queue: deque[Tuple[str, int]] = deque([(start_url, 0)])
+        if crawl_opts.seed_urls:
+            for seed_url in crawl_opts.seed_urls:
+                normalized_seed = _normalize_url(seed_url)
+                if normalized_seed != _normalize_url(start_url):
+                    queue.append((seed_url, 1))
+
         visited: Set[str] = set()
         results: List[PageContent] = []
         depth_map: Dict[str, int] = {}

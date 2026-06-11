@@ -14,9 +14,17 @@ type DetailDrawerProps = {
   summaryInfo?: SummaryInfo | null;
   onClose: () => void;
   onDownload: (item: HistoryItem) => void;
+  onDownloadPdf?: (item: HistoryItem) => void;
 };
 
-export function DetailDrawer({ item, content, summaryInfo, onClose, onDownload }: DetailDrawerProps) {
+export function DetailDrawer({
+  item,
+  content,
+  summaryInfo,
+  onClose,
+  onDownload,
+  onDownloadPdf,
+}: DetailDrawerProps) {
   if (!item) return null;
 
   const hasSummary =
@@ -45,12 +53,21 @@ export function DetailDrawer({ item, content, summaryInfo, onClose, onDownload }
             </p>
           </div>
           <div className="flex flex-shrink-0 gap-2">
+            {onDownloadPdf && (item.event_id || item.scan_id) && (
+              <button
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-3 py-1.5 text-xs text-slate-200 transition hover:border-white/30"
+                onClick={() => onDownloadPdf(item)}
+              >
+                <FileDown className="h-4 w-4" />
+                PDF
+              </button>
+            )}
             <button
               className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-3 py-1.5 text-xs text-slate-200 transition hover:border-white/30"
               onClick={() => onDownload(item)}
             >
               <FileDown className="h-4 w-4" />
-              Скачать JSON
+              JSON
             </button>
           </div>
           <button

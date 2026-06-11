@@ -63,9 +63,14 @@ def build_scan_messages(
     header = _format_metadata(context)
     body = "\n\n".join(_format_section(section) for section in sections)
 
+    recon_block = ""
+    if context.recon_context:
+        recon_block = f"\n\n{context.recon_context}\n"
+
     user_prompt = (
-        f"{header}\n\n=== Содержание страницы ===\n{body}\n\n"
-        "Проанализируй страницу. Ответ должен строго соответствовать JSON-схеме:\n"
+        f"{header}{recon_block}\n\n=== Содержание страницы ===\n{body}\n\n"
+        "Проанализируй страницу с учётом данных разведки (если есть). "
+        "Ответ должен строго соответствовать JSON-схеме:\n"
         f"{RESPONSE_SCHEMA}"
     )
 

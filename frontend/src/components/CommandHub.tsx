@@ -83,9 +83,15 @@ export function CommandHub({
   const isInjectionVector =
     isXssExploit || isCommandInjection || isPathTraversal || isSsti || isXxe || isSsrf;
   const scannerOptions = [
-    { key: "nmap", label: "Nmap", description: "Активное сканирование", icon: Radar },
-    { key: "shodan", label: "Shodan", description: "Поиск по сети", icon: Shuffle },
-    { key: "virustotal", label: "VirusTotal", description: "IOC / файлы", icon: Database },
+    { key: "nmap", label: "Nmap", description: "Порты и сервисы", icon: Radar },
+    { key: "dorks", label: "Dorks", description: "Google + Shodan", icon: Shuffle },
+    { key: "shodan", label: "Shodan", description: "Host intel по IP", icon: Radio },
+    { key: "virustotal", label: "VirusTotal", description: "Репутация", icon: Database },
+    { key: "subdomains", label: "Поддомены", description: "crt.sh + DNS", icon: MapPin },
+    { key: "technologies", label: "Технологии", description: "HTTP fingerprint", icon: SlidersHorizontal },
+    { key: "files", label: "Файлы", description: "Типовые пути", icon: BookOpen },
+    { key: "github", label: "GitHub", description: "Утечки кода", icon: Terminal },
+    { key: "seo", label: "SEO grep", description: "robots / sitemap", icon: Sparkles },
   ] as const;
 
   return (
@@ -176,8 +182,17 @@ export function CommandHub({
                 </select>
               </div>
             </label>
+            <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                className={checkboxClass}
+                checked={reconForm.useCache}
+                onChange={(e) => setReconForm((prev) => ({ ...prev, useCache: e.target.checked }))}
+              />
+              <span>Кэш разведки (1 час) — повторный скан той же цели вернётся мгновенно.</span>
+            </label>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-              Маршруты Nmap, Shodan и VirusTotal будут связаны с отчётом, статусы появятся в истории и JSON.
+              Комплексный режим включает поиск файлов по топ-поддоменам. Отчёт: JSON, Markdown и PDF.
             </div>
           </div>
 
@@ -186,7 +201,7 @@ export function CommandHub({
               <Radar className="h-4 w-4 text-primary" />
               Сканеры и параметры
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {scannerOptions.map((scanner) => {
                 const enabled = reconForm.scanners[scanner.key];
                 const Icon = scanner.icon;
@@ -214,7 +229,7 @@ export function CommandHub({
                 );
               })}
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <label className="block space-y-2">
                 <span className={labelClass}>Nmap аргументы</span>
                 <textarea
@@ -226,13 +241,23 @@ export function CommandHub({
                 />
               </label>
               <label className="block space-y-2">
+                <span className={labelClass}>Google dork</span>
+                <textarea
+                  className={textareaClass}
+                  rows={3}
+                  value={reconForm.googleDork}
+                  onChange={(e) => setReconForm((prev) => ({ ...prev, googleDork: e.target.value }))}
+                  placeholder='site:example.com ext:env OR intitle:"index of"'
+                />
+              </label>
+              <label className="block space-y-2">
                 <span className={labelClass}>Shodan dork</span>
                 <textarea
                   className={textareaClass}
                   rows={3}
                   value={reconForm.shodanQuery}
                   onChange={(e) => setReconForm((prev) => ({ ...prev, shodanQuery: e.target.value }))}
-                  placeholder='ssl:true http.title:"vpn" city:"moscow"'
+                  placeholder='ssl.cert.subject.cn:"example.com"'
                 />
               </label>
               <label className="block space-y-2">
@@ -609,6 +634,40 @@ export function CommandHub({
               />
             </label>
           </div>
+
+          <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              className={checkboxClass}
+              checked={llmForm.useCombinedAudit}
+              onChange={(e) => setLlmForm((prev) => ({ ...prev, useCombinedAudit: e.target.checked }))}
+            />
+            <span>
+              Recon → LLM: сначала разведка (поддомены, файлы, GitHub), затем аудит с OSINT-контекстом.
+            </span>
+          </label>
+
+          {llmForm.useCombinedAudit && (
+            <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                className={checkboxClass}
+                checked={llmForm.runReconFirst}
+                onChange={(e) => setLlmForm((prev) => ({ ...prev, runReconFirst: e.target.checked }))}
+              />
+              <span>Запустить новую разведку (если не указан ID события из истории).</span>
+            </label>
+          )}
+
+          <label className="block space-y-2">
+            <span className={labelClass}>ID разведки из истории (опционально)</span>
+            <input
+              className={inputClass}
+              placeholder="comprehensive_domain_example.com_..."
+              value={llmForm.reconEventId}
+              onChange={(e) => setLlmForm((prev) => ({ ...prev, reconEventId: e.target.value }))}
+            />
+          </label>
 
           <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
             <input
