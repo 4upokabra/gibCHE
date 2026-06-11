@@ -54,6 +54,11 @@ class AttackType(str, Enum):
     XSS_EXPLOIT = AttackVector.XSS_EXPLOIT.value
     COMMAND_INJECTION = AttackVector.COMMAND_INJECTION.value
     PATH_TRAVERSAL = AttackVector.PATH_TRAVERSAL.value
+    SSRF = AttackVector.SSRF.value
+    SSTI = AttackVector.SSTI.value
+    XXE = AttackVector.XXE.value
+    OPEN_REDIRECT = AttackVector.OPEN_REDIRECT.value
+    CORS_MISCONFIG = AttackVector.CORS_MISCONFIG.value
 
 
 class TestingProfile(str, Enum):

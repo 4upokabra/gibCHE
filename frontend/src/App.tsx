@@ -98,6 +98,9 @@ export default function App() {
     injectionParam: "q",
     injectionPayloads: "",
     traversalFile: "etc/passwd",
+    ssrfTargets: "",
+    redirectPayload: "https://evil.example.com",
+    corsOrigin: "https://evil-attacker.example",
     label: "",
   });
   const [llmForm, setLlmForm] = useState<LlmFormState>({
@@ -204,6 +207,10 @@ export default function App() {
         .split(/[\n,]/)
         .map((item) => item.trim())
         .filter(Boolean);
+      const ssrfTargets = attackForm.ssrfTargets
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
       await apiFetch("/attack/execute", {
         method: "POST",
         body: JSON.stringify({
@@ -224,6 +231,9 @@ export default function App() {
             param: attackForm.injectionParam,
             ...(customPayloads.length > 0 ? { payloads: customPayloads } : {}),
             file: attackForm.traversalFile,
+            ...(ssrfTargets.length > 0 ? { targets: ssrfTargets } : {}),
+            payload: attackForm.redirectPayload,
+            origin: attackForm.corsOrigin,
           },
           label: label || undefined,
         }),

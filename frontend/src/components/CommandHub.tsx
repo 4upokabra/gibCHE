@@ -75,7 +75,13 @@ export function CommandHub({
   const isXssExploit = attackForm.attackType === "xss_exploit";
   const isCommandInjection = attackForm.attackType === "command_injection";
   const isPathTraversal = attackForm.attackType === "path_traversal";
-  const isInjectionVector = isXssExploit || isCommandInjection || isPathTraversal;
+  const isSsrf = attackForm.attackType === "ssrf";
+  const isSsti = attackForm.attackType === "ssti";
+  const isXxe = attackForm.attackType === "xxe";
+  const isOpenRedirect = attackForm.attackType === "open_redirect";
+  const isCorsMisconfig = attackForm.attackType === "cors_misconfig";
+  const isInjectionVector =
+    isXssExploit || isCommandInjection || isPathTraversal || isSsti || isXxe || isSsrf;
   const scannerOptions = [
     { key: "nmap", label: "Nmap", description: "Активное сканирование", icon: Radar },
     { key: "shodan", label: "Shodan", description: "Поиск по сети", icon: Shuffle },
@@ -314,6 +320,11 @@ export function CommandHub({
                 <option value="xss_exploit">XSS Exploit</option>
                 <option value="command_injection">Command Injection</option>
                 <option value="path_traversal">Path Traversal / LFI</option>
+                <option value="ssrf">SSRF</option>
+                <option value="ssti">SSTI</option>
+                <option value="xxe">XXE</option>
+                <option value="open_redirect">Open Redirect</option>
+                <option value="cors_misconfig">CORS Misconfig</option>
               </select>
             </label>
             <label className="block space-y-2 md:col-span-1">
@@ -447,16 +458,18 @@ export function CommandHub({
                 <SlidersHorizontal className="h-4 w-4 text-rose-300" />
                 Параметры инъекции
               </div>
-              <label className="block space-y-2">
-                <span className={labelClass}>Параметр для инъекции</span>
-                <input
-                  className={inputClass}
-                  value={attackForm.injectionParam}
-                  onChange={(e) => setAttackForm((prev) => ({ ...prev, injectionParam: e.target.value }))}
-                  placeholder="q"
-                />
-              </label>
-              {(isXssExploit || isCommandInjection) && (
+              {!isXxe && (
+                <label className="block space-y-2">
+                  <span className={labelClass}>Параметр для инъекции</span>
+                  <input
+                    className={inputClass}
+                    value={attackForm.injectionParam}
+                    onChange={(e) => setAttackForm((prev) => ({ ...prev, injectionParam: e.target.value }))}
+                    placeholder="q"
+                  />
+                </label>
+              )}
+              {(isXssExploit || isCommandInjection || isSsti) && (
                 <label className="block space-y-2">
                   <span className={labelClass}>Свои payload'ы (comma / newline, опционально)</span>
                   <textarea
@@ -467,12 +480,14 @@ export function CommandHub({
                     placeholder={
                       isXssExploit
                         ? "<script>alert(document.domain)</script>"
-                        : ";id\n|whoami"
+                        : isSsti
+                          ? "{{7*7}}\n${7*7}"
+                          : ";id\n|whoami"
                     }
                   />
                 </label>
               )}
-              {isPathTraversal && (
+              {(isPathTraversal || isXxe) && (
                 <label className="block space-y-2">
                   <span className={labelClass}>Целевой файл</span>
                   <input
@@ -483,10 +498,69 @@ export function CommandHub({
                   />
                 </label>
               )}
+              {isSsrf && (
+                <label className="block space-y-2">
+                  <span className={labelClass}>Целевые SSRF-адреса (comma / newline, опционально)</span>
+                  <textarea
+                    className={textareaClass}
+                    rows={3}
+                    value={attackForm.ssrfTargets}
+                    onChange={(e) => setAttackForm((prev) => ({ ...prev, ssrfTargets: e.target.value }))}
+                    placeholder="http://127.0.0.1\nhttp://169.254.169.254/latest/meta-data/"
+                  />
+                </label>
+              )}
               <p className="text-xs text-slate-500">
                 {isXssExploit && "Набор payload'ов будет подставлен в указанный параметр URL, проверяется отражение без экранирования."}
                 {isCommandInjection && "Проверяются output- и time-based payload'ы для обнаружения OS command injection."}
                 {isPathTraversal && "Перебираются варианты traversal-путей для чтения указанного файла через параметр."}
+                {isSsrf && "Указанные адреса (или внутренние/служебные по умолчанию) подставляются в параметр и проверяются на SSRF."}
+                {isSsti && "Пробы вычисления выражений ({{7*7}} и аналоги) подставляются в параметр для обнаружения SSTI."}
+                {isXxe && "В тело запроса отправляется XML с внешней сущностью, ссылающейся на указанный файл."}
+              </p>
+            </div>
+          )}
+
+          {isOpenRedirect && (
+            <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-400">
+                <SlidersHorizontal className="h-4 w-4 text-rose-300" />
+                Open Redirect
+              </div>
+              <label className="block space-y-2">
+                <span className={labelClass}>Целевой адрес редиректа</span>
+                <input
+                  className={inputClass}
+                  value={attackForm.redirectPayload}
+                  onChange={(e) => setAttackForm((prev) => ({ ...prev, redirectPayload: e.target.value }))}
+                  placeholder="https://evil.example.com"
+                />
+              </label>
+              <p className="text-xs text-slate-500">
+                Перебираются типовые редирект-параметры (redirect, url, next, return и т.д.), проверяется
+                Location-заголовок на совпадение с указанным адресом.
+              </p>
+            </div>
+          )}
+
+          {isCorsMisconfig && (
+            <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/40 p-5">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-400">
+                <SlidersHorizontal className="h-4 w-4 text-rose-300" />
+                CORS Misconfig
+              </div>
+              <label className="block space-y-2">
+                <span className={labelClass}>Заголовок Origin</span>
+                <input
+                  className={inputClass}
+                  value={attackForm.corsOrigin}
+                  onChange={(e) => setAttackForm((prev) => ({ ...prev, corsOrigin: e.target.value }))}
+                  placeholder="https://evil-attacker.example"
+                />
+              </label>
+              <p className="text-xs text-slate-500">
+                Запрос отправляется с указанным Origin; проверяется отражение в Access-Control-Allow-Origin
+                совместно с Access-Control-Allow-Credentials: true.
               </p>
             </div>
           )}
@@ -649,8 +723,9 @@ export function CommandHub({
           <div className="rounded-3xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-400">
             «Auto Pentest» создаёт пошаговый план (разведка → атаки → отчёт) и запускает встроенные инструменты:
             Nmap (включая vuln-скрипты), Shodan, VirusTotal, XSS-разведку, Dirfuzz (gobuster), Nikto, а также атаки
-            Hydra, SQLMap, Metasploit, XSS Exploit, Command Injection и Path Traversal/LFI. История и прогресс
-            появятся в ленте событий.
+            Hydra, SQLMap, Metasploit, XSS Exploit, Command Injection, Path Traversal/LFI, SSRF, SSTI, XXE, Open
+            Redirect и CORS Misconfig. Параметры/URL для атак автоматически дополняются находками разведки
+            (уязвимые параметры из XSS-скана, пути из Dirfuzz). История и прогресс появятся в ленте событий.
           </div>
 
           <button

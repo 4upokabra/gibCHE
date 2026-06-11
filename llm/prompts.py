@@ -133,7 +133,7 @@ AUTO_PENTEST_PLAN_SCHEMA = """{
     {
       "id": "string",
       "kind": "audit|recon|scan|attack|report",
-      "method": "llm.audit|intelligence.basic|nmap.quick|nmap.full|nmap.custom|nmap.vuln|shodan.host|virustotal.ip|web.xss_scan|web.dirfuzz|web.nikto|attack.bruteforce|attack.sqli|attack.metasploit|attack.xss_exploit|attack.command_injection|attack.path_traversal|json.report|llm.report",
+      "method": "llm.audit|intelligence.basic|nmap.quick|nmap.full|nmap.custom|nmap.vuln|shodan.host|virustotal.ip|web.xss_scan|web.dirfuzz|web.nikto|attack.bruteforce|attack.sqli|attack.metasploit|attack.xss_exploit|attack.command_injection|attack.path_traversal|attack.ssrf|attack.ssti|attack.xxe|attack.open_redirect|attack.cors_misconfig|json.report|llm.report",
       "args": { "key": "value" }
     }
   ]
@@ -157,7 +157,7 @@ def build_autopentest_plan_messages(target: str, profile: str, goal: str, scope:
         "Ты — главный пентестер. Построй план Auto Pentest из 5 этапов:\n"
         "1) llm.audit — сначала проведи LLM аудит веб-приложения (Playwright/Requests).\n"
         "2) recon/scan — выбери оптимальные сканеры и аргументы (Nmap, Shodan, VirusTotal, web.xss_scan, web.dirfuzz, web.nikto, nmap.vuln и т. д.).\n"
-        "3) attack — подбери лучшие векторы (Hydra, SQLMap, Metasploit, XSS, command injection, path traversal) с учётом аудита, разведки и пожеланий пользователя.\n"
+        "3) attack — подбери лучшие векторы (Hydra, SQLMap, Metasploit, XSS, command injection, path traversal, SSRF, SSTI, XXE, open redirect, CORS) с учётом аудита, разведки и пожеланий пользователя.\n"
         "4) report — сформируй общую JSON-сводку (json.report).\n"
         "5) llm.report — подготовь итоговый отчёт.\n\n"
         "Используй доступные инструменты:\n"
@@ -172,7 +172,14 @@ def build_autopentest_plan_messages(target: str, profile: str, goal: str, scope:
         "- attack.xss_exploit — эксплуатация отражённого XSS, найденного на разведке\n"
         "- attack.command_injection — проверка/эксплуатация OS command injection\n"
         "- attack.path_traversal — эксплуатация Path Traversal/LFI для чтения файлов\n"
+        "- attack.ssrf — проверка Server-Side Request Forgery через подстановку внутренних адресов\n"
+        "- attack.ssti — проверка Server-Side Template Injection (вычисление выражений шаблонизатором)\n"
+        "- attack.xxe — XML External Entity для чтения локальных файлов через XML-эндпоинты\n"
+        "- attack.open_redirect — проверка открытых редиректов через типовые параметры\n"
+        "- attack.cors_misconfig — проверка некорректной настройки CORS (отражение Origin + credentials)\n"
         "- json.report, llm.report — отчётность\n\n"
+        "Если web.xss_scan или web.dirfuzz находят уязвимые параметры/пути, используй их результаты для "
+        "построения последующих attack-шагов (параметры/URL подставляются автоматически оркестратором).\n\n"
         f"Профиль: {profile}. Цель: {target}. Business goal: {goal}. Scope: {scope_block}. Пожелания: {notes_block}\n"
         "План должен быть реализуем, шагов не больше 8. Ответ строго по JSON-схеме:\n"
         f"{schema}"

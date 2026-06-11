@@ -32,6 +32,9 @@ export type AttackFormState = {
   injectionParam: string;
   injectionPayloads: string;
   traversalFile: string;
+  ssrfTargets: string;
+  redirectPayload: string;
+  corsOrigin: string;
   label: string;
 };
 
