@@ -16,7 +16,7 @@ class ReconOptions:
         "virustotal": True,
         "subdomains": True,
         "technologies": True,
-        "files": False,
+        "files": True,
         "github": True,
         "seo": True,
         "dorks": True,

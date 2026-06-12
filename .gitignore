@@ -25,9 +25,6 @@ htmlcov/
 # Logs
 *.log
 
-# Recon runtime cache
-Autoscan/artifacts/recon_cache/
-
 # Playwright
 playwright/.cache/
 

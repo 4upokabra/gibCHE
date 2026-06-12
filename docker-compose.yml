@@ -25,6 +25,9 @@ services:
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
       VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_CSE_ID: ${GOOGLE_CSE_ID:-}
       MSFRPC_URL: ${MSFRPC_URL:-http://metasploit:55553/api/}
       MSFRPC_TOKEN: ${MSFRPC_TOKEN:-}
       MSFRPC_USER: ${MSFRPC_USER:-}
@@ -47,7 +50,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "417:80"
+      - "8081:80"
 
 volumes:
   postgres_data:

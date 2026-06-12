@@ -1,25 +1,28 @@
-export type PendingAction = "recon" | "attack" | "llm" | null;
+export type PendingAction = "recon" | "attack" | "llm" | "autopentest" | null;
+
+export type OsintScanners = {
+  nmap: boolean;
+  shodan: boolean;
+  virustotal: boolean;
+  subdomains: boolean;
+  technologies: boolean;
+  files: boolean;
+  github: boolean;
+  seo: boolean;
+  dorks: boolean;
+};
 
 export type ReconFormState = {
   target: string;
   targetType: "ip" | "domain" | "network";
   comprehensive: boolean;
-  scanners: {
-    nmap: boolean;
-    shodan: boolean;
-    virustotal: boolean;
-    subdomains: boolean;
-    technologies: boolean;
-    files: boolean;
-    github: boolean;
-    seo: boolean;
-    dorks: boolean;
-  };
+  useCache: boolean;
+  scanners: OsintScanners;
   nmapArgs: string;
   shodanQuery: string;
   googleDork: string;
   virustotalFlags: string;
-  useCache: boolean;
+  label: string;
 };
 
 export type AttackFormState = {
@@ -36,15 +39,17 @@ export type AttackFormState = {
   metasploitPayload: string;
   metasploitOptions: string;
   sqlmapFlags: string;
+  label: string;
 };
 
 export type LlmFormState = {
   url: string;
+  target: string;
   goal: string;
   use_browser: boolean;
-  reconEventId: string;
-  runReconFirst: boolean;
-  useCombinedAudit: boolean;
+  run_osint: boolean;
+  comprehensive: boolean;
+  label: string;
 };
 
 export type ActionSummary = {
@@ -53,8 +58,26 @@ export type ActionSummary = {
   offensive_actions?: string[];
 };
 
+export type ScanFinding = {
+  title?: string;
+  severity?: string;
+  description?: string;
+  evidence?: string[];
+  recommendations?: string[];
+  cwe_ids?: string[];
+  cve_ids?: string[];
+  bdu_ids?: string[];
+  threat_ids?: string[];
+};
+
 export type LlmReport = {
   summary?: string;
+  findings?: ScanFinding[];
+  metadata?: {
+    taxonomy?: { cwe?: string[]; bdu?: string[]; threats?: string[] };
+    enrichment?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
   action_summary?: ActionSummary;
   [key: string]: unknown;
 };
@@ -63,6 +86,7 @@ export type HistoryItem = {
   event_id?: string;
   scan_id?: string;
   report_id?: string;
+  task_id?: string;
   type?: string;
   status?: string;
   timestamp?: string;
@@ -73,9 +97,11 @@ export type HistoryItem = {
   message?: string;
   error?: string;
   summary?: string;
+  recon_summary?: string;
   metadata?: Record<string, unknown>;
   action_summary?: ActionSummary;
   report?: LlmReport;
+  label?: string;
 };
 
 export type HistoryStats = {
@@ -91,6 +117,16 @@ export type FilterState = {
   status: string;
 };
 
+export type TaskControlState = {
+  task_id: string;
+  kind: string;
+  status: string;
+  metadata?: Record<string, unknown>;
+  error?: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type HealthResponse = {
   status: string;
   timestamp: string;
@@ -104,3 +140,11 @@ export type Toast = {
   tone: "success" | "error";
 };
 
+export type AutoPentestForm = {
+  target: string;
+  profile: "black_box" | "grey_box" | "white_box";
+  goal: string;
+  scope: string;
+  notes: string;
+  label: string;
+};

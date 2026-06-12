@@ -6,9 +6,10 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { AuthOverlay } from "./components/AuthOverlay";
 import { ToastStack } from "./components/ToastStack";
-import type { ActionSummary, LlmReport } from "./types";
+import type { ActionSummary, LlmReport, ScanFinding } from "./types";
 import {
   AttackFormState,
+  AutoPentestForm,
   FilterState,
   HealthResponse,
   HistoryItem,
@@ -16,6 +17,7 @@ import {
   LlmFormState,
   PendingAction,
   ReconFormState,
+  TaskControlState,
   Toast,
 } from "./types";
 
@@ -51,35 +53,44 @@ const stringify = (value: unknown) =>
   );
 
 const safeItems = (items?: HistoryItem[]) => (Array.isArray(items) ? items : []);
+const mapTasks = (items?: TaskControlState[]) =>
+  (Array.isArray(items) ? items : []).reduce<Record<string, TaskControlState>>((acc, task) => {
+    acc[task.task_id] = task;
+    return acc;
+  }, {});
 
 export default function App() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [detailItem, setDetailItem] = useState<HistoryItem | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [tasks, setTasks] = useState<Record<string, TaskControlState>>({});
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [filters, setFilters] = useState<FilterState>({ search: "", status: "all" });
   const [toastList, setToastList] = useState<Toast[]>([]);
+  const defaultScanners = {
+    nmap: true,
+    shodan: true,
+    virustotal: true,
+    subdomains: true,
+    technologies: true,
+    files: true,
+    github: true,
+    seo: true,
+    dorks: true,
+  };
+
   const [reconForm, setReconForm] = useState<ReconFormState>({
     target: "scanme.nmap.org",
-    targetType: "ip",
+    targetType: "domain",
     comprehensive: true,
-    scanners: {
-      nmap: true,
-      shodan: true,
-      virustotal: true,
-      subdomains: true,
-      technologies: true,
-      files: false,
-      github: true,
-      seo: true,
-      dorks: true,
-    },
-    nmapArgs: "-sC -sV",
-    shodanQuery: 'ssl:"example.com"',
-    googleDork: 'site:example.com ext:env OR ext:sql',
-    virustotalFlags: "--include-malware --historical",
     useCache: true,
+    scanners: defaultScanners,
+    nmapArgs: "",
+    shodanQuery: "",
+    googleDork: "",
+    virustotalFlags: "",
+    label: "",
   });
   const [attackForm, setAttackForm] = useState<AttackFormState>({
     target: "10.10.10.10",
@@ -95,14 +106,24 @@ export default function App() {
     metasploitPayload: "linux/x64/shell_reverse_tcp",
     metasploitOptions: "LHOST=10.10.14.2;LPORT=4444",
     sqlmapFlags: "--risk=3 --level=5 --batch",
+    label: "",
   });
   const [llmForm, setLlmForm] = useState<LlmFormState>({
     url: "http://testphp.vulnweb.com",
-    goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты с учётом OSINT.",
+    target: "testphp.vulnweb.com",
+    goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты.",
     use_browser: true,
-    reconEventId: "",
-    runReconFirst: true,
-    useCombinedAudit: true,
+    run_osint: true,
+    comprehensive: true,
+    label: "",
+  });
+  const [autopentestForm, setAutopentestForm] = useState<AutoPentestForm>({
+    target: "scanme.nmap.org",
+    profile: "black_box",
+    goal: "Построить цепочку атак и подготовить отчёт.",
+    scope: "",
+    notes: "",
+    label: "",
   });
   const [isAuthorized, setIsAuthorized] = useState(() => ACCESS_PASS.length === 0);
   const [passwordInput, setPasswordInput] = useState("");
@@ -116,8 +137,12 @@ export default function App() {
   const fetchHistory = async () => {
     try {
       setLoadingHistory(true);
-      const response = await apiFetch<{ items?: HistoryItem[] }>("/history");
-      setHistory(safeItems(response.items).slice().reverse());
+      const [historyResponse, tasksResponse] = await Promise.all([
+        apiFetch<{ items?: HistoryItem[] }>("/history"),
+        apiFetch<{ items?: TaskControlState[] }>("/tasks"),
+      ]);
+      setHistory(safeItems(historyResponse.items).slice().reverse());
+      setTasks(mapTasks(tasksResponse.items));
     } catch (error) {
       notify({ tone: "error", title: "История недоступна", description: String(error) });
     } finally {
@@ -164,21 +189,20 @@ export default function App() {
 
   const handleRecon = () =>
     runAction("recon", async () => {
+      const label = reconForm.label.trim();
       const payload = {
         target: reconForm.target,
         target_type: reconForm.targetType,
         comprehensive: reconForm.comprehensive,
         use_cache: reconForm.useCache,
-        scanners: {
-          ...reconForm.scanners,
-          files: reconForm.comprehensive ? true : reconForm.scanners.files,
-        },
+        scanners: reconForm.scanners,
         overrides: {
-          nmap_args: reconForm.nmapArgs,
-          shodan_query: reconForm.shodanQuery,
-          google_dork: reconForm.googleDork,
-          virustotal_flags: reconForm.virustotalFlags,
+          nmap_args: reconForm.nmapArgs || undefined,
+          shodan_query: reconForm.shodanQuery || undefined,
+          google_dork: reconForm.googleDork || undefined,
+          virustotal_flags: reconForm.virustotalFlags || undefined,
         },
+        label: label || undefined,
       };
       await apiFetch(
         reconForm.comprehensive ? "/intelligence/comprehensive" : "/intelligence/basic",
@@ -188,6 +212,7 @@ export default function App() {
 
   const handleAttack = () =>
     runAction("attack", async () => {
+      const label = attackForm.label.trim();
       await apiFetch("/attack/execute", {
         method: "POST",
         body: JSON.stringify({
@@ -206,72 +231,86 @@ export default function App() {
             metasploit_options: attackForm.metasploitOptions,
             sqlmap_flags: attackForm.sqlmapFlags,
           },
+          label: label || undefined,
         }),
       });
     });
 
   const handleLLMScan = () =>
     runAction("llm", async () => {
-      if (llmForm.useCombinedAudit) {
-        const target = (() => {
-          try {
-            return new URL(llmForm.url).hostname;
-          } catch {
-            return llmForm.url.replace(/^https?:\/\//, "").split("/")[0];
-          }
-        })();
-        const reconId = llmForm.reconEventId.trim();
+      const label = llmForm.label.trim();
+      if (llmForm.run_osint) {
         await apiFetch("/intelligence/llm-audit", {
           method: "POST",
           body: JSON.stringify({
-            target,
+            target: llmForm.target || llmForm.url.replace(/^https?:\/\//, "").split("/")[0],
             target_type: "domain",
             url: llmForm.url,
             goal: llmForm.goal,
-            recon_event_id: reconId || undefined,
-            run_recon: reconId ? false : llmForm.runReconFirst,
-            comprehensive: true,
+            run_recon: true,
+            comprehensive: llmForm.comprehensive,
             use_browser: llmForm.use_browser,
+            scanners: defaultScanners,
+            label: label || undefined,
           }),
         });
         return;
       }
-
-      const payload: Record<string, unknown> = {
-        url: llmForm.url,
-        goal: llmForm.goal,
-        use_browser: llmForm.use_browser,
-      };
-      if (llmForm.reconEventId.trim()) {
-        payload.recon_event_id = llmForm.reconEventId.trim();
-      }
       await apiFetch("/llm/scan", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          url: llmForm.url,
+          goal: llmForm.goal,
+          use_browser: llmForm.use_browser,
+          label: label || undefined,
+        }),
+      });
+    });
+
+  const handleAutoPentest = () =>
+    runAction("autopentest", async () => {
+      const label = autopentestForm.label.trim();
+      await apiFetch("/autopentest/start", {
+        method: "POST",
+        body: JSON.stringify({
+          target: autopentestForm.target,
+          profile: autopentestForm.profile,
+          goal: autopentestForm.goal,
+          scope: autopentestForm.scope,
+          notes: autopentestForm.notes,
+          label: label || undefined,
+        }),
       });
     });
 
   const historyStats = useMemo<HistoryStats>(() => {
-    const completed = history.filter((item) => item.status === "completed").length;
-    const failed = history.filter((item) => (item.status ?? "").includes("fail") || item.status === "error").length;
-    const running = history.filter((item) => ["started", "processing", "running"].includes(item.status ?? "")).length;
+    const effectiveStatuses = history.map((item) => {
+      const taskId = item.task_id ?? item.event_id ?? item.scan_id ?? item.report_id;
+      return tasks[taskId ?? ""]?.status ?? item.status ?? "completed";
+    });
+    const completed = effectiveStatuses.filter((status) => status === "completed").length;
+    const failed = effectiveStatuses.filter((status) => status.includes("fail") || status === "error").length;
+    const running = effectiveStatuses.filter((status) => ["started", "processing", "running"].includes(status)).length;
     const total = history.length;
     const successRate = total === 0 ? 0 : Math.round((completed / total) * 100);
     return { completed, failed, running, total, successRate };
-  }, [history]);
+  }, [history, tasks]);
 
   const filteredHistory = useMemo(() => {
     return history.filter((item) => {
       const matchesSearch =
         filters.search.trim().length === 0 ||
-        [item.target, item.event_id, item.scan_id, item.type]
+        [item.label, item.target, item.event_id, item.scan_id, item.type]
           .join(" ")
           .toLowerCase()
           .includes(filters.search.toLowerCase());
-      const matchesStatus = filters.status === "all" || item.status === filters.status;
+      const taskId = item.task_id ?? item.event_id ?? item.scan_id ?? item.report_id;
+      const taskStatus = taskId ? tasks[taskId]?.status : undefined;
+      const effectiveStatus = taskStatus ?? item.status;
+      const matchesStatus = filters.status === "all" || effectiveStatus === filters.status;
       return matchesSearch && matchesStatus;
     });
-  }, [filters, history]);
+  }, [filters, history, tasks]);
 
   const downloadResult = (item: HistoryItem) => {
     const filename = `${item.event_id || item.scan_id || item.report_id || "result"}.json`;
@@ -283,23 +322,25 @@ export default function App() {
     URL.revokeObjectURL(link.href);
   };
 
-  const downloadPdfReport = async (item: HistoryItem) => {
-    const eventId = item.event_id || item.scan_id;
-    if (!eventId) {
-      notify({ tone: "error", title: "PDF недоступен", description: "Нет event_id для отчёта" });
-      return;
-    }
+  const handleTaskAction = async (taskId: string, action: "pause" | "resume" | "cancel") => {
     try {
-      const response = await fetch(`${API_BASE}/intelligence/report/${eventId}?format=pdf`);
-      if (!response.ok) throw new Error(await response.text());
-      const blob = await response.blob();
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `reconscope_${eventId}.pdf`;
-      link.click();
-      URL.revokeObjectURL(link.href);
+      await apiFetch(`/tasks/${taskId}/${action}`, {
+        method: "POST",
+        body: action === "cancel" ? JSON.stringify({ reason: "Остановлено через интерфейс" }) : undefined,
+      });
+      notify({
+        tone: "success",
+        title: "Статус обновлён",
+        description:
+          action === "pause"
+            ? "Задача поставлена на паузу"
+            : action === "resume"
+              ? "Задача продолжена"
+              : "Задача отменена",
+      });
+      fetchHistory();
     } catch (error) {
-      notify({ tone: "error", title: "Ошибка PDF", description: String(error) });
+      notify({ tone: "error", title: "Не удалось обновить задачу", description: String(error) });
     }
   };
 
@@ -350,6 +391,34 @@ export default function App() {
       defensive,
       offensive,
     };
+  }, [detailItem]);
+
+  const llmFindings = useMemo((): ScanFinding[] => {
+    if (!detailItem) return [];
+
+    const rawData = detailItem.data;
+    const dataObject =
+      rawData && typeof rawData === "object" && !Array.isArray(rawData) ? (rawData as Record<string, unknown>) : undefined;
+    const dataReport =
+      dataObject && "report" in dataObject
+        ? ((dataObject as { report?: LlmReport }).report as LlmReport | undefined)
+        : undefined;
+    const report = detailItem.report ?? dataReport;
+    return Array.isArray(report?.findings) ? report.findings : [];
+  }, [detailItem]);
+
+  const llmTaxonomy = useMemo(() => {
+    if (!detailItem) return undefined;
+
+    const rawData = detailItem.data;
+    const dataObject =
+      rawData && typeof rawData === "object" && !Array.isArray(rawData) ? (rawData as Record<string, unknown>) : undefined;
+    const dataReport =
+      dataObject && "report" in dataObject
+        ? ((dataObject as { report?: LlmReport }).report as LlmReport | undefined)
+        : undefined;
+    const report = detailItem.report ?? dataReport;
+    return report?.metadata?.taxonomy;
   }, [detailItem]);
 
   const handleAuthorize = () => {
@@ -473,10 +542,13 @@ export default function App() {
             setAttackForm={setAttackForm}
             llmForm={llmForm}
             setLlmForm={setLlmForm}
+            autopentestForm={autopentestForm}
+            setAutopentestForm={setAutopentestForm}
             pendingAction={pendingAction}
             onRecon={handleRecon}
             onAttack={handleAttack}
             onLLM={handleLLMScan}
+            onAutoPentest={handleAutoPentest}
           />
           <SystemPulse
             health={health}
@@ -496,6 +568,8 @@ export default function App() {
           onSelectItem={setDetailItem}
           formatDate={formatDate}
           apiDocsUrl={apiDocsUrl}
+          taskControls={tasks}
+          onTaskAction={handleTaskAction}
         />
       </div>
 
@@ -512,9 +586,10 @@ export default function App() {
         item={detailItem}
         content={detailItem && detailValue ? stringify(detailValue) : ""}
         summaryInfo={summaryInfo}
+        findings={llmFindings}
+        taxonomy={llmTaxonomy}
         onClose={() => setDetailItem(null)}
         onDownload={downloadResult}
-        onDownloadPdf={downloadPdfReport}
       />
 
       <ToastStack toastList={toastList} />

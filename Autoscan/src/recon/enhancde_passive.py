@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from src.core.contracts import IntelligenceProvider
 from src.core.events import BaseEvent
-from src.integrations.dorks import DorkScanner
+from src.integrations.dorks import DorkScanner, enrich_shodan_dorks_from_hosts
 from src.integrations.file_enum import FileEnumerator
 from src.integrations.github_osint import GitHubOSINT
 from src.integrations.nmap import NmapScanner
@@ -26,7 +26,7 @@ from src.recon.reporting import build_action_summary, build_markdown_report, bui
 
 
 class EnhancedPassiveRecon(IntelligenceProvider):
-    """OSINT-пайплайн: поддомены, IP, подсети, технологии, файлы, GitHub, TI."""
+    """OSINT-????????: ??????????, IP, ????????, ????????????, ???????, GitHub, TI."""
 
     def __init__(
         self,
@@ -72,9 +72,26 @@ class EnhancedPassiveRecon(IntelligenceProvider):
 
         scan_hosts: List[str] = [target]
 
-        # --- 1. Поддомены, IP, подсети ---
+        # --- 1. ???????????, IP, ???????? ---
         if target_type == "domain" and options.scanners.get("subdomains", True):
-            sub_data = self.subdomains.enumerate(target, brute=options.is_full)
+            sub_data = self.subdomains.enumerate(target, brute=True)
+            if options.scanners.get("shodan", True):
+                shodan_dns = self.shodan.dns_domain(target)
+                if shodan_dns.get("subdomains"):
+                    hosts_set = set(sub_data.get("hosts", [target]))
+                    sources = dict(sub_data.get("sources") or {})
+                    shodan_hosts: List[str] = []
+                    for label in shodan_dns["subdomains"]:
+                        fqdn = label if label.endswith(target) else f"{label}.{target}"
+                        shodan_hosts.append(fqdn)
+                        hosts_set.add(fqdn)
+                    sources["shodan_dns"] = len(shodan_hosts)
+                    ordered = sorted(hosts_set)
+                    sub_data["hosts"] = ordered
+                    sub_data["count"] = len(ordered)
+                    sub_data["sources"] = sources
+                if shodan_dns and not shodan_dns.get("error"):
+                    results["shodan_dns"] = shodan_dns
             results["subdomains"] = sub_data
             scan_hosts = sub_data.get("hosts", [target])
 
@@ -88,7 +105,7 @@ class EnhancedPassiveRecon(IntelligenceProvider):
             results["resolved_ips"] = [target]
             results["subnets"] = derive_subnets([target])
 
-        # --- 2. Пассивные модули (параллельно) ---
+        # --- 2. ??????????? ??????? (?????????????) ---
         passive_tasks: Dict[str, Callable[[], Any]] = {}
 
         if options.scanners.get("github", True):
@@ -103,9 +120,9 @@ class EnhancedPassiveRecon(IntelligenceProvider):
                 scan_hosts, max_hosts=max_hosts
             )
 
-        if target_type == "domain" and options.scanners.get("files", False):
-            file_hosts_limit = 8 if options.is_full else 5
-            paths_limit = 12 if options.is_full else 8
+        if target_type == "domain" and options.scanners.get("files", True):
+            file_hosts_limit = 8 if options.is_full else 4
+            paths_limit = 12 if options.is_full else 10
             passive_tasks["files"] = lambda: self.files.enumerate_hosts(
                 scan_hosts,
                 max_hosts=file_hosts_limit,
@@ -143,7 +160,7 @@ class EnhancedPassiveRecon(IntelligenceProvider):
             if value and (not isinstance(value, dict) or "error" not in value):
                 results[key] = value
 
-        # --- 3. Nmap (активный, отдельно) ---
+        # --- 3. Nmap (??????????, ??????????) ---
         if options.scanners.get("nmap", True):
             nmap_args = options.overrides.get("nmap_args")
             if nmap_args:
@@ -155,7 +172,7 @@ class EnhancedPassiveRecon(IntelligenceProvider):
             if "error" not in nmap_result:
                 results["network_scan"] = nmap_result
 
-        # --- 4. Shodan по IP (параллельно) ---
+        # --- 4. Shodan ?? IP (?????????????) ---
         if options.scanners.get("shodan", True):
             ips = results.get("resolved_ips", [])[:5]
 
@@ -167,13 +184,20 @@ class EnhancedPassiveRecon(IntelligenceProvider):
                 if isinstance(intel, dict) and "error" not in intel:
                     results.setdefault("shodan_hosts", []).append(intel)
 
-        # --- 5. Сеть ---
+        if results.get("dorks") and results.get("shodan_hosts"):
+            results["dorks"] = enrich_shodan_dorks_from_hosts(
+                results["dorks"],
+                results["shodan_hosts"],
+                target,
+            )
+
+        # --- 5. Network discovery ---
         if target_type == "network":
             network_scan = self._run_async(self.nmap.scan_target(target, "-sn"))
             if "error" not in network_scan:
                 results["network_discovery"] = network_scan
 
-        # --- 6. Threat intelligence + отчётность ---
+        # --- 6. Threat intelligence + ???????????????? ---
         results["threat_intel"] = aggregate_intel(results)
         results["summary"] = build_text_summary(results)
         results["action_summary"] = build_action_summary(results)

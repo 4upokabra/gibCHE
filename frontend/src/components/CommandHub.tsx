@@ -14,10 +14,12 @@ import {
   Sparkles,
   Target,
   Terminal,
+  Workflow,
   Zap,
 } from "lucide-react";
 import {
   AttackFormState,
+  AutoPentestForm,
   LlmFormState,
   PendingAction,
   ReconFormState,
@@ -37,10 +39,13 @@ type CommandHubProps = {
   setAttackForm: Dispatch<SetStateAction<AttackFormState>>;
   llmForm: LlmFormState;
   setLlmForm: Dispatch<SetStateAction<LlmFormState>>;
+  autopentestForm: AutoPentestForm;
+  setAutopentestForm: Dispatch<SetStateAction<AutoPentestForm>>;
   pendingAction: PendingAction;
   onRecon: () => void;
   onAttack: () => void;
   onLLM: () => void;
+  onAutoPentest: () => void;
 };
 
 const tabTriggerClass =
@@ -56,24 +61,27 @@ export function CommandHub({
   setAttackForm,
   llmForm,
   setLlmForm,
+  autopentestForm,
+  setAutopentestForm,
   pendingAction,
   onRecon,
   onAttack,
   onLLM,
+  onAutoPentest,
 }: CommandHubProps) {
   const isBruteforce = attackForm.attackType === "bruteforce";
   const isMetasploit = attackForm.attackType === "metasploit";
   const isSQLi = attackForm.attackType === "sqli";
   const scannerOptions = [
-    { key: "nmap", label: "Nmap", description: "Порты и сервисы", icon: Radar },
-    { key: "dorks", label: "Dorks", description: "Google + Shodan", icon: Shuffle },
-    { key: "shodan", label: "Shodan", description: "Host intel по IP", icon: Radio },
-    { key: "virustotal", label: "VirusTotal", description: "Репутация", icon: Database },
-    { key: "subdomains", label: "Поддомены", description: "crt.sh + DNS", icon: MapPin },
-    { key: "technologies", label: "Технологии", description: "HTTP fingerprint", icon: SlidersHorizontal },
-    { key: "files", label: "Файлы", description: "Типовые пути", icon: BookOpen },
-    { key: "github", label: "GitHub", description: "Утечки кода", icon: Terminal },
-    { key: "seo", label: "SEO grep", description: "robots / sitemap", icon: Sparkles },
+    { key: "nmap", label: "Nmap", icon: Radar },
+    { key: "shodan", label: "Shodan", icon: Radio },
+    { key: "virustotal", label: "VT", icon: Database },
+    { key: "subdomains", label: "Поддомены", icon: MapPin },
+    { key: "technologies", label: "Стек", icon: SlidersHorizontal },
+    { key: "dorks", label: "Dorks", icon: Shuffle },
+    { key: "github", label: "GitHub", icon: BookOpen },
+    { key: "seo", label: "SEO", icon: Target },
+    { key: "files", label: "Файлы", icon: Terminal },
   ] as const;
 
   return (
@@ -103,7 +111,7 @@ export function CommandHub({
       </div>
 
       <Tabs.Root defaultValue="recon" className="mt-8 flex flex-col gap-6">
-        <Tabs.List className="grid gap-2 sm:grid-cols-3">
+        <Tabs.List className="grid gap-2 sm:grid-cols-4">
           <Tabs.Trigger value="recon" className={tabTriggerClass}>
             <Target className="h-4 w-4 text-primary" />
             Разведка
@@ -115,6 +123,10 @@ export function CommandHub({
           <Tabs.Trigger value="llm" className={tabTriggerClass}>
             <Sparkles className="h-4 w-4 text-sky-300" />
             LLM аудит
+          </Tabs.Trigger>
+          <Tabs.Trigger value="auto" className={tabTriggerClass}>
+            <Workflow className="h-4 w-4 text-emerald-300" />
+            Auto Pentest
           </Tabs.Trigger>
         </Tabs.List>
 
@@ -145,114 +157,98 @@ export function CommandHub({
             </label>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="flex flex-wrap items-center gap-4">
             <label className="block space-y-2">
               <span className={labelClass}>Режим</span>
-              <div className="relative">
-                <Radar className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                <select
-                  className={clsx(inputClass, "appearance-none pl-11")}
-                  value={reconForm.comprehensive ? "full" : "quick"}
-                  onChange={(e) => setReconForm((prev) => ({ ...prev, comprehensive: e.target.value === "full" }))}
-                >
-                  <option value="quick">Быстрый скан</option>
-                  <option value="full">Комплексный отчёт</option>
-                </select>
-              </div>
+              <select
+                className={inputClass}
+                value={reconForm.comprehensive ? "full" : "quick"}
+                onChange={(e) => setReconForm((prev) => ({ ...prev, comprehensive: e.target.value === "full" }))}
+              >
+                <option value="quick">Быстрый</option>
+                <option value="full">Полный</option>
+              </select>
             </label>
-            <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+            <label className="flex items-center gap-2 pt-6 text-sm text-slate-400">
               <input
                 type="checkbox"
                 className={checkboxClass}
                 checked={reconForm.useCache}
                 onChange={(e) => setReconForm((prev) => ({ ...prev, useCache: e.target.checked }))}
               />
-              <span>Кэш разведки (1 час) — повторный скан той же цели вернётся мгновенно.</span>
+              Кэш 1ч
             </label>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-              Комплексный режим включает поиск файлов по топ-поддоменам. Отчёт: JSON, Markdown и PDF.
-            </div>
           </div>
 
-          <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/40 p-5">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-400">
-              <Radar className="h-4 w-4 text-primary" />
-              Сканеры и параметры
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {scannerOptions.map((scanner) => {
-                const enabled = reconForm.scanners[scanner.key];
-                const Icon = scanner.icon;
-                return (
-                  <button
-                    key={scanner.key}
-                    type="button"
-                    onClick={() =>
-                      setReconForm((prev) => ({
-                        ...prev,
-                        scanners: { ...prev.scanners, [scanner.key]: !prev.scanners[scanner.key] },
-                      }))
-                    }
-                    className={clsx(
-                      "flex flex-col gap-1 rounded-2xl border px-4 py-3 text-left transition",
-                      enabled
-                        ? "border-primary/50 bg-primary/10 text-white"
-                        : "border-white/10 bg-white/5 text-slate-400 hover:border-white/30",
-                    )}
-                  >
-                    <Icon className={clsx("h-4 w-4", enabled ? "text-primary" : "text-slate-500")} />
-                    <span className="text-sm font-semibold">{scanner.label}</span>
-                    <span className="text-[11px] uppercase tracking-[0.3em]">{scanner.description}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <label className="block space-y-2">
-                <span className={labelClass}>Nmap аргументы</span>
-                <textarea
-                  className={textareaClass}
-                  rows={3}
-                  value={reconForm.nmapArgs}
-                  onChange={(e) => setReconForm((prev) => ({ ...prev, nmapArgs: e.target.value }))}
-                  placeholder="-sC -sV -Pn --top-ports=100"
-                />
-              </label>
-              <label className="block space-y-2">
-                <span className={labelClass}>Google dork</span>
-                <textarea
-                  className={textareaClass}
-                  rows={3}
-                  value={reconForm.googleDork}
-                  onChange={(e) => setReconForm((prev) => ({ ...prev, googleDork: e.target.value }))}
-                  placeholder='site:example.com ext:env OR intitle:"index of"'
-                />
-              </label>
-              <label className="block space-y-2">
-                <span className={labelClass}>Shodan dork</span>
-                <textarea
-                  className={textareaClass}
-                  rows={3}
-                  value={reconForm.shodanQuery}
-                  onChange={(e) => setReconForm((prev) => ({ ...prev, shodanQuery: e.target.value }))}
-                  placeholder='ssl.cert.subject.cn:"example.com"'
-                />
-              </label>
-              <label className="block space-y-2">
-                <span className={labelClass}>VirusTotal фильтры</span>
-                <textarea
-                  className={textareaClass}
-                  rows={3}
-                  value={reconForm.virustotalFlags}
-                  onChange={(e) => setReconForm((prev) => ({ ...prev, virustotalFlags: e.target.value }))}
-                  placeholder="--include-malware --historical"
-                />
-              </label>
-            </div>
-            <p className="text-xs text-slate-500">
-              Можно отключить лишние источники и тонко настроить запросы – параметры попадут в backend вместе с задачей.
-            </p>
+          <div className="flex flex-wrap gap-2">
+            {scannerOptions.map((scanner) => {
+              const enabled = reconForm.scanners[scanner.key];
+              const Icon = scanner.icon;
+              return (
+                <button
+                  key={scanner.key}
+                  type="button"
+                  onClick={() =>
+                    setReconForm((prev) => ({
+                      ...prev,
+                      scanners: { ...prev.scanners, [scanner.key]: !prev.scanners[scanner.key] },
+                    }))
+                  }
+                  className={clsx(
+                    "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                    enabled
+                      ? "border-primary/50 bg-primary/15 text-white"
+                      : "border-white/10 bg-white/5 text-slate-400 hover:border-white/25",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {scanner.label}
+                </button>
+              );
+            })}
           </div>
+
+          <details className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-400">
+            <summary className="cursor-pointer text-xs uppercase tracking-[0.25em] text-slate-300">
+              Доп. параметры
+            </summary>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <input
+                className={inputClass}
+                value={reconForm.nmapArgs}
+                onChange={(e) => setReconForm((prev) => ({ ...prev, nmapArgs: e.target.value }))}
+                placeholder="Nmap: -sC -sV --top-ports=100"
+              />
+              <input
+                className={inputClass}
+                value={reconForm.shodanQuery}
+                onChange={(e) => setReconForm((prev) => ({ ...prev, shodanQuery: e.target.value }))}
+                placeholder='Shodan dork: ssl.cert.subject.cn:"example.com"'
+              />
+              <input
+                className={inputClass}
+                value={reconForm.googleDork}
+                onChange={(e) => setReconForm((prev) => ({ ...prev, googleDork: e.target.value }))}
+                placeholder='Google dork: site:example.com ext:env'
+              />
+              <input
+                className={inputClass}
+                value={reconForm.virustotalFlags}
+                onChange={(e) => setReconForm((prev) => ({ ...prev, virustotalFlags: e.target.value }))}
+                placeholder="VirusTotal фильтры"
+              />
+            </div>
+          </details>
+
+          <label className="block space-y-2">
+            <span className={labelClass}>Название задачи (опционально)</span>
+            <input
+              className={inputClass}
+              value={reconForm.label}
+              onChange={(e) => setReconForm((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Например, «Скан внешнего периметра»"
+            />
+          </label>
 
           <button onClick={onRecon} disabled={pendingAction === "recon"} className={actionButtonClass}>
             {pendingAction === "recon" ? (
@@ -437,6 +433,16 @@ export function CommandHub({
             </div>
           )}
 
+          <label className="block space-y-2">
+            <span className={labelClass}>Название задачи (опционально)</span>
+            <input
+              className={inputClass}
+              value={attackForm.label}
+              onChange={(e) => setAttackForm((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Например, «Hydra по SSH 146.103.121»"
+            />
+          </label>
+
           <button onClick={onAttack} disabled={pendingAction === "attack"} className={actionButtonClass}>
             {pendingAction === "attack" ? (
               <>
@@ -453,81 +459,183 @@ export function CommandHub({
         </Tabs.Content>
 
         <Tabs.Content value="llm" className="space-y-5">
-          <div className="grid gap-5 md:grid-cols-2">
-            <label className="block space-y-2 md:col-span-2">
-              <span className={labelClass}>URL</span>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="block space-y-2">
+              <span className={labelClass}>Домен / цель OSINT</span>
+              <input
+                className={inputClass}
+                value={llmForm.target}
+                onChange={(e) => setLlmForm((prev) => ({ ...prev, target: e.target.value }))}
+                placeholder="example.com"
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className={labelClass}>URL для анализа</span>
               <input
                 className={inputClass}
                 value={llmForm.url}
                 onChange={(e) => setLlmForm((prev) => ({ ...prev, url: e.target.value }))}
               />
             </label>
-            <label className="block space-y-2 md:col-span-2">
-              <span className={labelClass}>Задача аудита</span>
-              <textarea
-                className={textareaClass}
-                value={llmForm.goal}
-                onChange={(e) => setLlmForm((prev) => ({ ...prev, goal: e.target.value }))}
-              />
-            </label>
           </div>
 
-          <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              className={checkboxClass}
-              checked={llmForm.useCombinedAudit}
-              onChange={(e) => setLlmForm((prev) => ({ ...prev, useCombinedAudit: e.target.checked }))}
+          <label className="block space-y-2">
+            <span className={labelClass}>Задача аудита</span>
+            <textarea
+              className={textareaClass}
+              rows={3}
+              value={llmForm.goal}
+              onChange={(e) => setLlmForm((prev) => ({ ...prev, goal: e.target.value }))}
             />
-            <span>
-              Recon → LLM: сначала разведка (поддомены, файлы, GitHub), затем аудит с OSINT-контекстом.
-            </span>
           </label>
 
-          {llmForm.useCombinedAudit && (
-            <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+          <div className="flex flex-wrap gap-4 text-sm text-slate-300">
+            <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 className={checkboxClass}
-                checked={llmForm.runReconFirst}
-                onChange={(e) => setLlmForm((prev) => ({ ...prev, runReconFirst: e.target.checked }))}
+                checked={llmForm.run_osint}
+                onChange={(e) => setLlmForm((prev) => ({ ...prev, run_osint: e.target.checked }))}
               />
-              <span>Запустить новую разведку (если не указан ID события из истории).</span>
+              OSINT перед LLM
             </label>
-          )}
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className={checkboxClass}
+                checked={llmForm.comprehensive}
+                disabled={!llmForm.run_osint}
+                onChange={(e) => setLlmForm((prev) => ({ ...prev, comprehensive: e.target.checked }))}
+              />
+              Полная разведка
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className={checkboxClass}
+                checked={llmForm.use_browser}
+                onChange={(e) => setLlmForm((prev) => ({ ...prev, use_browser: e.target.checked }))}
+              />
+              Playwright
+            </label>
+          </div>
 
           <label className="block space-y-2">
-            <span className={labelClass}>ID разведки из истории (опционально)</span>
+            <span className={labelClass}>Название (опционально)</span>
             <input
               className={inputClass}
-              placeholder="comprehensive_domain_example.com_..."
-              value={llmForm.reconEventId}
-              onChange={(e) => setLlmForm((prev) => ({ ...prev, reconEventId: e.target.value }))}
+              value={llmForm.label}
+              onChange={(e) => setLlmForm((prev) => ({ ...prev, label: e.target.value }))}
             />
-          </label>
-
-          <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              className={checkboxClass}
-              checked={llmForm.use_browser}
-              onChange={(e) => setLlmForm((prev) => ({ ...prev, use_browser: e.target.checked }))}
-            />
-            <span>
-              Использовать Playwright (Chromium) для загрузки SPA, обработки cookie и рендеринга контента перед LLM-анализом.
-            </span>
           </label>
 
           <button onClick={onLLM} disabled={pendingAction === "llm"} className={actionButtonClass}>
             {pendingAction === "llm" ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Согласуем промпт...
+                {llmForm.run_osint ? "Разведка и анализ..." : "Анализ..."}
               </>
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                Запустить LLM-скан
+                {llmForm.run_osint ? "Разведка + LLM-аудит" : "Только LLM-аудит"}
+              </>
+            )}
+          </button>
+        </Tabs.Content>
+
+        <Tabs.Content value="auto" className="space-y-5">
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-200">Auto Pentester</p>
+            <p className="text-slate-400 text-sm">
+              LLM самостоятельно построит стратегию разведки и атак, выполнит шаги и подготовит отчёт. Укажите цель,
+              режим доступа и деловой контекст.
+            </p>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <label className="block space-y-2">
+              <span className={labelClass}>Цель</span>
+              <input
+                className={inputClass}
+                value={autopentestForm.target}
+                onChange={(e) => setAutopentestForm((prev) => ({ ...prev, target: e.target.value }))}
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className={labelClass}>Профиль</span>
+              <select
+                className={inputClass}
+                value={autopentestForm.profile}
+                onChange={(e) =>
+                  setAutopentestForm((prev) => ({ ...prev, profile: e.target.value as AutoPentestForm["profile"] }))
+                }
+              >
+                <option value="black_box">Black box</option>
+                <option value="grey_box">Grey box</option>
+                <option value="white_box">White box</option>
+              </select>
+            </label>
+          </div>
+          <label className="block space-y-2">
+            <span className={labelClass}>Цель проверки</span>
+            <textarea
+              className={textareaClass}
+              rows={3}
+              value={autopentestForm.goal}
+              onChange={(e) => setAutopentestForm((prev) => ({ ...prev, goal: e.target.value }))}
+              placeholder="Например: поиск уязвимостей OWASP Top 10 на внешнем портале"
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className={labelClass}>Scope / ограничения</span>
+            <textarea
+              className={textareaClass}
+              rows={3}
+              value={autopentestForm.scope}
+              onChange={(e) => setAutopentestForm((prev) => ({ ...prev, scope: e.target.value }))}
+              placeholder="Сегмент сети, поддомены, политики dry-run и т. д."
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className={labelClass}>Комментарии / пожелания</span>
+            <textarea
+              className={textareaClass}
+              rows={3}
+              value={autopentestForm.notes}
+              onChange={(e) => setAutopentestForm((prev) => ({ ...prev, notes: e.target.value }))}
+              placeholder="Что важно учесть: интересующие сервисы, ограничения, целевые данные..."
+            />
+          </label>
+
+          <label className="block space-y-2">
+            <span className={labelClass}>Название задачи (опционально)</span>
+            <input
+              className={inputClass}
+              value={autopentestForm.label}
+              onChange={(e) => setAutopentestForm((prev) => ({ ...prev, label: e.target.value }))}
+              placeholder="Например, «Auto Pentest интернет-банка»"
+            />
+          </label>
+
+          <div className="rounded-3xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-400">
+            «Auto Pentest» создаёт пошаговый план (разведка → атаки → отчёт) и запускает встроенные инструменты. История
+            и прогресс появятся в ленте событий.
+          </div>
+
+          <button
+            onClick={onAutoPentest}
+            disabled={pendingAction === "autopentest"}
+            className={actionButtonClass}
+          >
+            {pendingAction === "autopentest" ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Запускаем…
+              </>
+            ) : (
+              <>
+                <Workflow className="h-4 w-4" />
+                Стартовать Auto Pentest
               </>
             )}
           </button>
