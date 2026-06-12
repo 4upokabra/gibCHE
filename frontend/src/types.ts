@@ -39,6 +39,14 @@ export type AttackFormState = {
   metasploitPayload: string;
   metasploitOptions: string;
   sqlmapFlags: string;
+  injectionParam: string;
+  injectionPayloads: string;
+  traversalFile: string;
+  ssrfTargets: string;
+  redirectPayload: string;
+  corsOrigin: string;
+  nmapScanType: "quick" | "full" | "vuln" | "custom";
+  nmapArguments: string;
   label: string;
 };
 

@@ -106,6 +106,14 @@ export default function App() {
     metasploitPayload: "linux/x64/shell_reverse_tcp",
     metasploitOptions: "LHOST=10.10.14.2;LPORT=4444",
     sqlmapFlags: "--risk=3 --level=5 --batch",
+    injectionParam: "q",
+    injectionPayloads: "",
+    traversalFile: "etc/passwd",
+    ssrfTargets: "",
+    redirectPayload: "https://evil.example.com",
+    corsOrigin: "https://evil-attacker.example",
+    nmapScanType: "quick",
+    nmapArguments: "",
     label: "",
   });
   const [llmForm, setLlmForm] = useState<LlmFormState>({
@@ -213,6 +221,14 @@ export default function App() {
   const handleAttack = () =>
     runAction("attack", async () => {
       const label = attackForm.label.trim();
+      const customPayloads = attackForm.injectionPayloads
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const ssrfTargets = attackForm.ssrfTargets
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
       await apiFetch("/attack/execute", {
         method: "POST",
         body: JSON.stringify({
@@ -230,6 +246,14 @@ export default function App() {
             metasploit_payload: attackForm.metasploitPayload,
             metasploit_options: attackForm.metasploitOptions,
             sqlmap_flags: attackForm.sqlmapFlags,
+            param: attackForm.injectionParam,
+            ...(customPayloads.length > 0 ? { payloads: customPayloads } : {}),
+            file: attackForm.traversalFile,
+            ...(ssrfTargets.length > 0 ? { targets: ssrfTargets } : {}),
+            payload: attackForm.redirectPayload,
+            origin: attackForm.corsOrigin,
+            scan_type: attackForm.nmapScanType,
+            ...(attackForm.nmapArguments.trim() ? { arguments: attackForm.nmapArguments.trim() } : {}),
           },
           label: label || undefined,
         }),

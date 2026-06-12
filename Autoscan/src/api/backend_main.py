@@ -55,6 +55,15 @@ class AttackType(str, Enum):
     SQLI = AttackVector.SQLI.value
     METASPLOIT = AttackVector.METASPLOIT.value
     LEGACY_AUDIT = AttackVector.LEGACY_AUDIT.value
+    XSS_EXPLOIT = AttackVector.XSS_EXPLOIT.value
+    COMMAND_INJECTION = AttackVector.COMMAND_INJECTION.value
+    PATH_TRAVERSAL = AttackVector.PATH_TRAVERSAL.value
+    SSRF = AttackVector.SSRF.value
+    SSTI = AttackVector.SSTI.value
+    XXE = AttackVector.XXE.value
+    OPEN_REDIRECT = AttackVector.OPEN_REDIRECT.value
+    CORS_MISCONFIG = AttackVector.CORS_MISCONFIG.value
+    NMAP_SCAN = AttackVector.NMAP_SCAN.value
 
 
 class TestingProfile(str, Enum):
