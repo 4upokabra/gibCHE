@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import uuid
 from dataclasses import asdict
 from datetime import datetime
@@ -76,7 +77,7 @@ class ScannersConfig(BaseModel):
     virustotal: bool = True
     subdomains: bool = True
     technologies: bool = True
-    files: bool = False
+    files: bool = True
     github: bool = True
     seo: bool = True
     dorks: bool = True
@@ -93,11 +94,11 @@ class IntelligenceRequest(BaseModel):
     target: str
     target_type: TargetType = TargetType.IP
     comprehensive: bool = False
-    label: Optional[str] = None
     profile: Optional[str] = Field(None, description="quick | full")
-    use_cache: bool = Field(True, description="Использовать кэш разведки (TTL 1ч)")
+    use_cache: bool = Field(True, description="Кэш разведки (TTL 1ч)")
     scanners: ScannersConfig = Field(default_factory=ScannersConfig)
     overrides: ScannerOverrides = Field(default_factory=ScannerOverrides)
+    label: Optional[str] = None
 
 
 class ScanRequest(BaseModel):
@@ -161,21 +162,17 @@ class LLMScanRequest(BaseModel):
     temperature: float = 0.2
     max_output_tokens: int = 2048
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    recon_event_id: Optional[str] = Field(None, description="ID готовой разведки")
     label: Optional[str] = None
-    recon_event_id: Optional[str] = Field(
-        None, description="ID события разведки для контекста LLM"
-    )
 
 
 class ReconLlmAuditRequest(BaseModel):
     target: str = Field(..., description="Домен или IP для разведки")
     target_type: TargetType = TargetType.DOMAIN
-    url: Optional[str] = Field(None, description="URL для LLM-краула (по умолчанию https://target)")
+    url: Optional[str] = Field(None, description="URL для LLM-краула")
     goal: str = Field(..., description="Цель LLM-аудита")
-    recon_event_id: Optional[str] = Field(
-        None, description="Использовать готовую разведку по ID"
-    )
-    run_recon: bool = Field(True, description="Запустить разведку, если нет recon_event_id")
+    recon_event_id: Optional[str] = None
+    run_recon: bool = Field(True, description="Запустить OSINT перед анализом")
     comprehensive: bool = Field(True, description="Полный профиль разведки")
     use_browser: bool = False
     model: str = "deepseek/deepseek-chat"
@@ -218,16 +215,6 @@ auto_pentest_orchestrator = AutoPentestOrchestrator(
 )
 
 
-def _resolve_recon_data(event_id: str) -> Dict[str, Any]:
-    record = results_store.get(event_id)
-    if not record:
-        raise HTTPException(status_code=404, detail=f"Recon event not found: {event_id}")
-    data = record.get("data")
-    if isinstance(data, dict):
-        return data
-    return record
-
-
 def _resolve_api_key(record: Optional[Any], env_var: str) -> Optional[str]:
     return os.getenv(env_var) or (record.api_key if record else None)
 
@@ -239,6 +226,26 @@ def _apply_summary(payload: Dict[str, Any], summary_payload: tuple[Optional[str]
     if action_summary:
         payload["action_summary"] = action_summary
     return payload
+
+
+def _resolve_recon_data(event_id: str) -> Dict[str, Any]:
+    record = results_store.get(event_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Recon event not found: {event_id}")
+    data = record.get("data")
+    if isinstance(data, dict):
+        return data
+    return record
+
+
+def _build_recon_options(request: IntelligenceRequest) -> ReconOptions:
+    return ReconOptions.from_request(
+        profile=request.profile,
+        scanners=request.scanners.model_dump(),
+        overrides=request.overrides.model_dump(exclude_none=True),
+        comprehensive=request.comprehensive,
+        use_cache=request.use_cache,
+    )
 
 
 async def get_shodan_client(db: AsyncSession) -> ShodanClient:
@@ -268,13 +275,14 @@ async def root() -> Dict[str, Any]:
     return {
         "service": "ReconScope Backend",
         "version": app.version,
-        "modules": ["recon", "scanners", "attack", "llm"],
+        "modules": ["recon", "scanners", "attack", "llm", "autopentest"],
         "docs": "/docs",
         "endpoints": {
             "recon": [
                 "POST /intelligence/basic",
                 "POST /intelligence/comprehensive",
                 "POST /intelligence/batch",
+                "POST /intelligence/llm-audit",
                 "GET /intelligence/report/{event_id}",
             ],
             "scanners": [
@@ -289,8 +297,18 @@ async def root() -> Dict[str, Any]:
             ],
             "llm": [
                 "POST /llm/scan",
-                "POST /intelligence/llm-audit",
                 "GET /llm/reports/{report_id}",
+            ],
+            "autopentest": [
+                "POST /autopentest/start",
+                "GET /autopentest/{run_id}",
+                "GET /autopentest",
+            ],
+            "tasks": [
+                "GET /tasks",
+                "POST /tasks/{task_id}/pause",
+                "POST /tasks/{task_id}/resume",
+                "POST /tasks/{task_id}/cancel",
             ],
         },
     }
@@ -306,14 +324,21 @@ async def health(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     except Exception as exc:
         db_status = f"error: {exc}"
 
-    nmap_status = "available"
-    try:
-        await nmap_scanner.quick_scan("scanme.nmap.org")
-    except Exception as exc:
-        nmap_status = f"error: {exc}"
+    nmap_status = "available" if shutil.which("nmap") else "missing_binary"
 
-    shodan_client = await get_shodan_client(db)
-    vt_client = await get_virustotal_client(db)
+    shodan_status = "missing_api_key"
+    vt_status = "missing_api_key"
+    try:
+        shodan_client = await get_shodan_client(db)
+        shodan_status = "configured" if shodan_client.api_key else "missing_api_key"
+    except Exception as exc:
+        shodan_status = f"error: {exc}"
+
+    try:
+        vt_client = await get_virustotal_client(db)
+        vt_status = "configured" if vt_client.api_key else "missing_api_key"
+    except Exception as exc:
+        vt_status = f"error: {exc}"
 
     return {
         "status": "ok",
@@ -321,22 +346,13 @@ async def health(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
         "components": {
             "database": db_status,
             "nmap": nmap_status,
-            "shodan": "configured" if shodan_client.api_key else "missing_api_key",
-            "virustotal": "configured" if vt_client.api_key else "missing_api_key",
+            "shodan": shodan_status,
+            "virustotal": vt_status,
             "attack_engine": "ready",
             "llm_pipeline": "ready",
+            "autopentest": "ready",
         },
     }
-
-
-def _build_recon_options(request: IntelligenceRequest) -> ReconOptions:
-    return ReconOptions.from_request(
-        profile=request.profile,
-        scanners=request.scanners.model_dump(),
-        overrides=request.overrides.model_dump(exclude_none=True),
-        comprehensive=request.comprehensive,
-        use_cache=request.use_cache,
-    )
 
 
 @app.post("/intelligence/basic")
@@ -357,8 +373,6 @@ async def basic_intelligence(request: IntelligenceRequest) -> Dict[str, Any]:
         "type": "recon.basic",
         "target": request.target,
         "timestamp": datetime.utcnow().isoformat(),
-        "summary": data.get("summary"),
-        "action_summary": data.get("action_summary"),
         "data": data,
         "label": request.label,
     }
@@ -380,8 +394,6 @@ async def comprehensive_intelligence(request: IntelligenceRequest) -> Dict[str, 
     )
     event_dict = event.to_dict()
     event_dict["target"] = request.target
-    event_dict["summary"] = event.data.get("summary")
-    event_dict["action_summary"] = event.data.get("action_summary")
     if request.label:
         event_dict["label"] = request.label
     _apply_summary(event_dict, build_scan_summary(event_dict.get("data")))
@@ -459,13 +471,8 @@ async def batch_intelligence(
             for target in request.targets:
                 await task_manager.checkpoint(task_id)
                 try:
-                    options = ReconOptions()
                     data = await loop.run_in_executor(
-                        None,
-                        recon_engine.gather,
-                        target,
-                        request.target_type.value,
-                        options,
+                        None, recon_engine.gather, target, request.target_type.value
                     )
                     batch_results.append({"target": target, "status": "completed", "data": data})
                 except Exception as exc:  # pragma: no cover
@@ -823,118 +830,11 @@ async def cancel_task(task_id: str, request: TaskActionRequest) -> Dict[str, Any
     return control.to_dict()
 
 
-@app.post("/llm/scan")
-async def llm_scan(
-    request: LLMScanRequest, background_tasks: BackgroundTasks
-) -> Dict[str, Any]:
-    task_id = f"llm_scan_{uuid.uuid4().hex[:8]}"
-    task_manager.create(task_id, "llm.scan", {"target": request.url, "goal": request.goal, "label": request.label})
-
-    results_store[task_id] = {
-        "event_id": task_id,
-        "task_id": task_id,
-        "type": "llm.scan",
-        "status": "processing",
-        "target": request.url,
-        "goal": request.goal,
-        "timestamp": datetime.utcnow().isoformat(),
-        "metadata": request.metadata,
-        "label": request.label,
-    }
-
-    async def run_llm() -> None:
-        try:
-            task_manager.mark_running(task_id)
-            await task_manager.checkpoint(task_id)
-
-            recon_data = None
-            if request.recon_event_id:
-                recon_data = _resolve_recon_data(request.recon_event_id)
-
-            options = ScanOptions(
-                model=request.model,
-                provider=request.provider,
-                temperature=request.temperature,
-                max_output_tokens=request.max_output_tokens,
-                use_browser=request.use_browser,
-            )
-            report = await llm_pipeline.run(
-                url=request.url,
-                scan_goal=request.goal,
-                options=options,
-                recon_data=recon_data,
-            )
-            metadata = dict(request.metadata)
-            if request.recon_event_id:
-                metadata["recon_event_id"] = request.recon_event_id
-
-            payload = {
-                "report_id": task_id,
-                "status": "completed",
-                "report": asdict(report),
-                "metadata": metadata,
-                "label": request.label,
-            }
-            llm_reports[task_id] = payload
-            results_store[task_id] = {
-                "event_id": task_id,
-                "task_id": task_id,
-                "type": "llm.scan",
-                "status": "completed",
-                "target": request.url,
-                "goal": request.goal,
-                "timestamp": datetime.utcnow().isoformat(),
-                "report": asdict(report),
-                "metadata": metadata,
-                "label": request.label,
-                "recon_event_id": request.recon_event_id,
-            }
-            task_manager.mark_completed(task_id)
-        except TaskCancelledError as cancel_exc:
-            llm_reports[task_id] = {
-                "report_id": task_id,
-                "status": "cancelled",
-                "error": str(cancel_exc),
-                "label": request.label,
-            }
-            results_store[task_id] = {
-                "event_id": task_id,
-                "task_id": task_id,
-                "type": "llm.scan",
-                "status": "cancelled",
-                "target": request.url,
-                "goal": request.goal,
-                "timestamp": datetime.utcnow().isoformat(),
-                "error": str(cancel_exc),
-                "metadata": request.metadata,
-                "label": request.label,
-            }
-            task_manager.mark_cancelled(task_id, str(cancel_exc))
-        except Exception as exc:  # pragma: no cover
-            llm_reports[task_id] = {"report_id": task_id, "status": "failed", "error": str(exc)}
-            results_store[task_id] = {
-                "event_id": task_id,
-                "task_id": task_id,
-                "type": "llm.scan",
-                "status": "failed",
-                "target": request.url,
-                "goal": request.goal,
-                "timestamp": datetime.utcnow().isoformat(),
-                "error": str(exc),
-                "metadata": request.metadata,
-                "label": request.label,
-            }
-            task_manager.mark_failed(task_id, str(exc))
-
-    background_tasks.add_task(run_llm)
-    return {"task_id": task_id, "status": "processing"}
-
-
 @app.post("/intelligence/llm-audit")
 async def recon_llm_audit(
     request: ReconLlmAuditRequest, background_tasks: BackgroundTasks
 ) -> Dict[str, Any]:
-    """Разведка → LLM-аудит в одном пайплайне."""
+    """OSINT-разведка → LLM-аудит в одном пайплайне."""
     task_id = f"recon_llm_{uuid.uuid4().hex[:8]}"
     audit_url = request.url or (
         request.target if request.target.startswith("http") else f"https://{request.target}"
@@ -980,8 +880,7 @@ async def recon_llm_audit(
                 recon_data = event.data
                 event_dict = event.to_dict()
                 event_dict["target"] = request.target
-                event_dict["summary"] = event.data.get("summary")
-                event_dict["action_summary"] = event.data.get("action_summary")
+                _apply_summary(event_dict, build_scan_summary(event.data))
                 results_store[recon_event_id] = event_dict
 
             scan_options = ScanOptions(
@@ -1013,7 +912,6 @@ async def recon_llm_audit(
                 "url": audit_url,
                 "goal": request.goal,
                 "timestamp": datetime.utcnow().isoformat(),
-                "label": request.label,
                 "recon_event_id": recon_event_id,
                 "recon_summary": recon_data.get("summary") if recon_data else None,
                 "report": report_dict,
@@ -1021,6 +919,7 @@ async def recon_llm_audit(
                 "action_summary": asdict(report.action_summary)
                 if report.action_summary
                 else recon_data.get("action_summary") if recon_data else None,
+                "label": request.label,
             }
         except Exception as exc:  # pragma: no cover
             llm_reports[task_id] = {
@@ -1037,8 +936,8 @@ async def recon_llm_audit(
                 "goal": request.goal,
                 "timestamp": datetime.utcnow().isoformat(),
                 "error": str(exc),
-                "label": request.label,
                 "recon_event_id": recon_event_id,
+                "label": request.label,
             }
 
     background_tasks.add_task(run_pipeline)
@@ -1048,6 +947,107 @@ async def recon_llm_audit(
         "url": audit_url,
         "recon_event_id": request.recon_event_id,
     }
+
+
+@app.post("/llm/scan")
+async def llm_scan(
+    request: LLMScanRequest, background_tasks: BackgroundTasks
+) -> Dict[str, Any]:
+    task_id = f"llm_scan_{uuid.uuid4().hex[:8]}"
+    task_manager.create(task_id, "llm.scan", {"target": request.url, "goal": request.goal, "label": request.label})
+
+    results_store[task_id] = {
+        "event_id": task_id,
+        "task_id": task_id,
+        "type": "llm.scan",
+        "status": "processing",
+        "target": request.url,
+        "goal": request.goal,
+        "timestamp": datetime.utcnow().isoformat(),
+        "metadata": request.metadata,
+        "label": request.label,
+    }
+
+    async def run_llm() -> None:
+        try:
+            task_manager.mark_running(task_id)
+            await task_manager.checkpoint(task_id)
+            recon_data = None
+            if request.recon_event_id:
+                recon_data = _resolve_recon_data(request.recon_event_id)
+
+            options = ScanOptions(
+                model=request.model,
+                provider=request.provider,
+                temperature=request.temperature,
+                max_output_tokens=request.max_output_tokens,
+                use_browser=request.use_browser,
+            )
+            report = await llm_pipeline.run(
+                url=request.url,
+                scan_goal=request.goal,
+                options=options,
+                recon_data=recon_data,
+            )
+            payload = {
+                "report_id": task_id,
+                "status": "completed",
+                "report": asdict(report),
+                "metadata": request.metadata,
+                "label": request.label,
+            }
+            llm_reports[task_id] = payload
+            results_store[task_id] = {
+                "event_id": task_id,
+                "task_id": task_id,
+                "type": "llm.scan",
+                "status": "completed",
+                "target": request.url,
+                "goal": request.goal,
+                "timestamp": datetime.utcnow().isoformat(),
+                "report": asdict(report),
+                "metadata": request.metadata,
+                "label": request.label,
+            }
+            task_manager.mark_completed(task_id)
+        except TaskCancelledError as cancel_exc:
+            llm_reports[task_id] = {
+                "report_id": task_id,
+                "status": "cancelled",
+                "error": str(cancel_exc),
+                "label": request.label,
+            }
+            results_store[task_id] = {
+                "event_id": task_id,
+                "task_id": task_id,
+                "type": "llm.scan",
+                "status": "cancelled",
+                "target": request.url,
+                "goal": request.goal,
+                "timestamp": datetime.utcnow().isoformat(),
+                "error": str(cancel_exc),
+                "metadata": request.metadata,
+                "label": request.label,
+            }
+            task_manager.mark_cancelled(task_id, str(cancel_exc))
+        except Exception as exc:  # pragma: no cover
+            llm_reports[task_id] = {"report_id": task_id, "status": "failed", "error": str(exc)}
+            results_store[task_id] = {
+                "event_id": task_id,
+                "task_id": task_id,
+                "type": "llm.scan",
+                "status": "failed",
+                "target": request.url,
+                "goal": request.goal,
+                "timestamp": datetime.utcnow().isoformat(),
+                "error": str(exc),
+                "metadata": request.metadata,
+                "label": request.label,
+            }
+            task_manager.mark_failed(task_id, str(exc))
+
+    background_tasks.add_task(run_llm)
+    return {"task_id": task_id, "status": "processing"}
 
 
 @app.get("/llm/reports/{report_id}")

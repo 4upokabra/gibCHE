@@ -7,12 +7,19 @@ class NmapScanner:
     def __init__(self):
         # В Docker nmap уже установлен и доступен
         self.nmap_path = "nmap"
-    
+
+    @staticmethod
+    def _with_skip_ping(arguments: str) -> str:
+        """Многие публичные хосты не отвечают на ping — без -Pn nmap вернёт пустой отчёт."""
+        if "-Pn" in arguments or "-sn" in arguments:
+            return arguments
+        return f"-Pn {arguments}"
+
     async def scan_target(self, target: str, arguments: str = "-sS -sV") -> Dict[str, Any]:
         """Асинхронное сканирование через Nmap"""
         try:
-            # Запускаем в отдельном процессе
-            cmd = f"{self.nmap_path} {arguments} -oX - {target}"
+            nmap_args = self._with_skip_ping(arguments)
+            cmd = f"{self.nmap_path} {nmap_args} -oX - {target}"
             
             process = await asyncio.create_subprocess_shell(
                 cmd,
@@ -29,7 +36,7 @@ class NmapScanner:
                 }
             
             # Парсим XML результат
-            return self._parse_nmap_xml(stdout.decode(), target, arguments)
+            return self._parse_nmap_xml(stdout.decode(), target, nmap_args)
             
         except Exception as e:
             return {"error": f"Nmap scan failed: {str(e)}"}
@@ -109,9 +116,9 @@ class NmapScanner:
         return await self.scan_target(target, "-F -T4")
     
     async def full_scan(self, target: str) -> Dict[str, Any]:
-        """Полное сканирование"""
-        return await self.scan_target(target, "-p- -sV -T4")
+        """Полное сканирование (top-1000 портов — баланс скорости и полноты)."""
+        return await self.scan_target(target, "--top-ports 1000 -sV -T4")
 
     async def vuln_scan(self, target: str) -> Dict[str, Any]:
-        """Сканирование известных уязвимостей через NSE-скрипты vuln"""
+        """Сканирование известных уязвимостей через NSE-скрипты vuln."""
         return await self.scan_target(target, "-sV --script vuln -T4")

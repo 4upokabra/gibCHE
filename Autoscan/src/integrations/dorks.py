@@ -11,7 +11,64 @@ from urllib.parse import parse_qs, unquote, urlparse
 import requests
 from bs4 import BeautifulSoup
 
-USER_AGENT = "ReconScope/0.2 (OSINT research)"
+USER_AGENT = (
+    "Mozilla/5.0 (compatible; ReconScope/0.2; +https://github.com/reconscope/osint)"
+)
+
+
+def enrich_shodan_dorks_from_hosts(
+    dorks_result: Dict[str, Any],
+    shodan_hosts: list[Dict[str, Any]],
+    target: str,
+) -> Dict[str, Any]:
+    """Если Shodan Search API недоступен — подставляем данные host lookup."""
+    if not isinstance(dorks_result, dict) or not shodan_hosts:
+        return dorks_result
+
+    shodan_block = dorks_result.setdefault(
+        "shodan_dorks",
+        {"engine": "shodan", "queries": [], "by_query": [], "count": 0},
+    )
+    if int(shodan_block.get("count") or 0) > 0:
+        return dorks_result
+
+    matches: List[Dict[str, Any]] = []
+    for host_entry in shodan_hosts:
+        if not isinstance(host_entry, dict):
+            continue
+        ip = host_entry.get("ip")
+        data = host_entry.get("data") or {}
+        for service in data.get("services") or []:
+            if not isinstance(service, dict):
+                continue
+            matches.append({
+                "ip": ip,
+                "port": service.get("port"),
+                "org": data.get("org"),
+                "location": ", ".join(
+                    part for part in (data.get("city"), data.get("country")) if part
+                ),
+                "service": service.get("service"),
+                "product": service.get("product"),
+                "banner": (service.get("banner") or "")[:100],
+                "source": "shodan_host_intel",
+            })
+
+    if not matches:
+        return dorks_result
+
+    shodan_block["by_query"] = list(shodan_block.get("by_query") or [])
+    shodan_block["by_query"].append({
+        "dork_id": "host_intel_fallback",
+        "query": f'hostname:"{target}"',
+        "note": "Shodan Search API недоступен — данные из host lookup по IP",
+        "matches": matches,
+        "total": len(matches),
+    })
+    shodan_block["count"] = len(matches)
+    shodan_block["engine"] = "shodan_host"
+    dorks_result["total_hits"] = int(dorks_result.get("total_hits") or 0) + len(matches)
+    return dorks_result
 
 GOOGLE_DORK_TEMPLATES: List[tuple[str, str]] = [
     ("site_files", 'site:{d} (ext:env | ext:sql | ext:bak | ext:log | ext:cfg | ext:ini)'),
@@ -83,7 +140,7 @@ class DorkScanner:
         queries: List[Dict[str, str]] = []
         if custom:
             queries.append({"id": "custom", "query": custom.strip()})
-        limit = len(GOOGLE_DORK_TEMPLATES) if full else 3
+        limit = len(GOOGLE_DORK_TEMPLATES) if full else 5
         for dork_id, template in GOOGLE_DORK_TEMPLATES[:limit]:
             queries.append({"id": dork_id, "query": template.format(d=domain)})
         return queries
@@ -184,8 +241,14 @@ class DorkScanner:
             hits = self._search_google_cse(query, limit)
             if hits:
                 return hits, "google_cse"
-        hits = self._search_duckduckgo(query, limit)
-        return hits, "duckduckgo" if hits else "none"
+        for engine_name, searcher in (
+            ("duckduckgo_lite", self._search_duckduckgo_lite),
+            ("duckduckgo", self._search_duckduckgo),
+        ):
+            hits = searcher(query, limit)
+            if hits:
+                return hits, engine_name
+        return [], "none"
 
     def _search_google_cse(self, query: str, limit: int) -> List[Dict[str, Any]]:
         try:
@@ -213,6 +276,37 @@ class DorkScanner:
             })
         return results
 
+    def _search_duckduckgo_lite(self, query: str, limit: int) -> List[Dict[str, Any]]:
+        try:
+            response = requests.get(
+                "https://lite.duckduckgo.com/lite/",
+                params={"q": query},
+                headers={"User-Agent": USER_AGENT},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+        except requests.RequestException:
+            return []
+
+        soup = BeautifulSoup(response.text, "lxml")
+        results: List[Dict[str, Any]] = []
+        for row in soup.select("table tr"):
+            link = row.select_one("a[href]")
+            if not link:
+                continue
+            url = self._unwrap_ddg_url(link.get("href", ""))
+            if not url or url.startswith("https://duckduckgo.com"):
+                continue
+            snippet_cell = row.select_one("td.result-snippet")
+            results.append({
+                "title": link.get_text(strip=True),
+                "url": url,
+                "snippet": snippet_cell.get_text(strip=True)[:300] if snippet_cell else "",
+            })
+            if len(results) >= limit:
+                break
+        return results
+
     def _search_duckduckgo(self, query: str, limit: int) -> List[Dict[str, Any]]:
         try:
             response = requests.post(
@@ -228,8 +322,8 @@ class DorkScanner:
         soup = BeautifulSoup(response.text, "lxml")
         results: List[Dict[str, Any]] = []
 
-        for block in soup.select(".result"):
-            link = block.select_one("a.result__a")
+        for block in soup.select(".result, .web-result"):
+            link = block.select_one("a.result__a, a.result__url")
             snippet = block.select_one(".result__snippet")
             if not link:
                 continue

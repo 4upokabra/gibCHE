@@ -96,6 +96,29 @@ class ShodanClient:
         except Exception as e:
             return {"error": f"Shodan request failed: {str(e)}"}
     
+    def dns_domain(self, domain: str) -> Dict[str, Any]:
+        """DNS-разведка домена через Shodan (без Search API)."""
+        host = self._extract_host(domain)
+        if not host or not self.api_key:
+            return {}
+        try:
+            response = requests.get(
+                f"https://api.shodan.io/dns/domain/{host}",
+                params={"key": self.api_key},
+                timeout=15,
+            )
+            if response.status_code == 401:
+                return {"error": "Shodan API key invalid"}
+            if response.status_code == 403:
+                return {"error": "Shodan DNS API access denied"}
+            response.raise_for_status()
+            payload = response.json()
+            payload["source"] = "shodan_dns"
+            payload["domain"] = host
+            return payload
+        except requests.RequestException as exc:
+            return {"error": f"Shodan DNS failed: {exc}"}
+
     def search(self, query: str, limit: int = 10) -> Dict[str, Any]:
         """Поиск в Shodan"""
         if not self.api_key:

@@ -86,9 +86,32 @@ class ThreatKnowledgeBase:
                 best_score = score
                 best_record = record
 
-        if best_score < 1.5:
+        if best_score < 1.0:
             return None
         return best_record
+
+
+def format_catalog_for_prompt(max_items: int = 12) -> str:
+    """Компактный справочник CWE / БДУ ФСТЭК / УБИ для промпта LLM."""
+    kb = ThreatKnowledgeBase()
+    lines = [
+        "=== Справочник классификаторов (используй при сопоставлении находок) ===",
+        f"Источник: {kb.metadata.get('source', 'threat_catalog')}",
+    ]
+    for record in kb.records[:max_items]:
+        parts = [record.name]
+        if record.cwe_ids:
+            parts.append(f"CWE: {', '.join(record.cwe_ids)}")
+        if record.bdu_ids:
+            parts.append(f"БДУ ФСТЭК: {', '.join(record.bdu_ids)}")
+        if record.threat_ids:
+            parts.append(f"УБИ: {', '.join(record.threat_ids)}")
+        lines.append("- " + " | ".join(parts))
+    lines.append(
+        "Для каждой находки обязательно заполни cwe_ids, bdu_ids (БДУ ФСТЭК), threat_ids (УБИ) "
+        "по этому справочнику или ближайшему аналогу."
+    )
+    return "\n".join(lines)
 
 
 def enrich_report(

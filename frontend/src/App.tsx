@@ -6,9 +6,10 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { DetailDrawer } from "./components/DetailDrawer";
 import { AuthOverlay } from "./components/AuthOverlay";
 import { ToastStack } from "./components/ToastStack";
-import type { ActionSummary, AutoPentestForm, LlmReport } from "./types";
+import type { ActionSummary, LlmReport, ScanFinding } from "./types";
 import {
   AttackFormState,
+  AutoPentestForm,
   FilterState,
   HealthResponse,
   HistoryItem,
@@ -67,26 +68,28 @@ export default function App() {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [filters, setFilters] = useState<FilterState>({ search: "", status: "all" });
   const [toastList, setToastList] = useState<Toast[]>([]);
+  const defaultScanners = {
+    nmap: true,
+    shodan: true,
+    virustotal: true,
+    subdomains: true,
+    technologies: true,
+    files: true,
+    github: true,
+    seo: true,
+    dorks: true,
+  };
+
   const [reconForm, setReconForm] = useState<ReconFormState>({
     target: "scanme.nmap.org",
-    targetType: "ip",
+    targetType: "domain",
     comprehensive: true,
-    scanners: {
-      nmap: true,
-      shodan: true,
-      virustotal: true,
-      subdomains: true,
-      technologies: true,
-      files: false,
-      github: true,
-      seo: true,
-      dorks: true,
-    },
-    nmapArgs: "-sC -sV",
-    shodanQuery: 'ssl:"example.com"',
-    googleDork: 'site:example.com ext:env OR ext:sql',
-    virustotalFlags: "--include-malware --historical",
     useCache: true,
+    scanners: defaultScanners,
+    nmapArgs: "",
+    shodanQuery: "",
+    googleDork: "",
+    virustotalFlags: "",
     label: "",
   });
   const [attackForm, setAttackForm] = useState<AttackFormState>({
@@ -103,21 +106,15 @@ export default function App() {
     metasploitPayload: "linux/x64/shell_reverse_tcp",
     metasploitOptions: "LHOST=10.10.14.2;LPORT=4444",
     sqlmapFlags: "--risk=3 --level=5 --batch",
-    injectionParam: "q",
-    injectionPayloads: "",
-    traversalFile: "etc/passwd",
-    ssrfTargets: "",
-    redirectPayload: "https://evil.example.com",
-    corsOrigin: "https://evil-attacker.example",
     label: "",
   });
   const [llmForm, setLlmForm] = useState<LlmFormState>({
     url: "http://testphp.vulnweb.com",
-    goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты с учётом OSINT.",
+    target: "testphp.vulnweb.com",
+    goal: "Найди OWASP Top 10, утечки данных и уязвимые компоненты.",
     use_browser: true,
-    reconEventId: "",
-    runReconFirst: true,
-    useCombinedAudit: true,
+    run_osint: true,
+    comprehensive: true,
     label: "",
   });
   const [autopentestForm, setAutopentestForm] = useState<AutoPentestForm>({
@@ -198,15 +195,12 @@ export default function App() {
         target_type: reconForm.targetType,
         comprehensive: reconForm.comprehensive,
         use_cache: reconForm.useCache,
-        scanners: {
-          ...reconForm.scanners,
-          files: reconForm.comprehensive ? true : reconForm.scanners.files,
-        },
+        scanners: reconForm.scanners,
         overrides: {
-          nmap_args: reconForm.nmapArgs,
-          shodan_query: reconForm.shodanQuery,
-          google_dork: reconForm.googleDork,
-          virustotal_flags: reconForm.virustotalFlags,
+          nmap_args: reconForm.nmapArgs || undefined,
+          shodan_query: reconForm.shodanQuery || undefined,
+          google_dork: reconForm.googleDork || undefined,
+          virustotal_flags: reconForm.virustotalFlags || undefined,
         },
         label: label || undefined,
       };
@@ -219,14 +213,6 @@ export default function App() {
   const handleAttack = () =>
     runAction("attack", async () => {
       const label = attackForm.label.trim();
-      const customPayloads = attackForm.injectionPayloads
-        .split(/[\n,]/)
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const ssrfTargets = attackForm.ssrfTargets
-        .split(/[\n,]/)
-        .map((item) => item.trim())
-        .filter(Boolean);
       await apiFetch("/attack/execute", {
         method: "POST",
         body: JSON.stringify({
@@ -244,12 +230,6 @@ export default function App() {
             metasploit_payload: attackForm.metasploitPayload,
             metasploit_options: attackForm.metasploitOptions,
             sqlmap_flags: attackForm.sqlmapFlags,
-            param: attackForm.injectionParam,
-            ...(customPayloads.length > 0 ? { payloads: customPayloads } : {}),
-            file: attackForm.traversalFile,
-            ...(ssrfTargets.length > 0 ? { targets: ssrfTargets } : {}),
-            payload: attackForm.redirectPayload,
-            origin: attackForm.corsOrigin,
           },
           label: label || undefined,
         }),
@@ -259,44 +239,31 @@ export default function App() {
   const handleLLMScan = () =>
     runAction("llm", async () => {
       const label = llmForm.label.trim();
-      if (llmForm.useCombinedAudit) {
-        const target = (() => {
-          try {
-            return new URL(llmForm.url).hostname;
-          } catch {
-            return llmForm.url.replace(/^https?:\/\//, "").split("/")[0];
-          }
-        })();
-        const reconId = llmForm.reconEventId.trim();
+      if (llmForm.run_osint) {
         await apiFetch("/intelligence/llm-audit", {
           method: "POST",
           body: JSON.stringify({
-            target,
+            target: llmForm.target || llmForm.url.replace(/^https?:\/\//, "").split("/")[0],
             target_type: "domain",
             url: llmForm.url,
             goal: llmForm.goal,
-            recon_event_id: reconId || undefined,
-            run_recon: reconId ? false : llmForm.runReconFirst,
-            comprehensive: true,
+            run_recon: true,
+            comprehensive: llmForm.comprehensive,
             use_browser: llmForm.use_browser,
+            scanners: defaultScanners,
             label: label || undefined,
           }),
         });
         return;
       }
-
-      const payload: Record<string, unknown> = {
-        url: llmForm.url,
-        goal: llmForm.goal,
-        use_browser: llmForm.use_browser,
-        label: label || undefined,
-      };
-      if (llmForm.reconEventId.trim()) {
-        payload.recon_event_id = llmForm.reconEventId.trim();
-      }
       await apiFetch("/llm/scan", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          url: llmForm.url,
+          goal: llmForm.goal,
+          use_browser: llmForm.use_browser,
+          label: label || undefined,
+        }),
       });
     });
 
@@ -377,26 +344,6 @@ export default function App() {
     }
   };
 
-  const downloadPdfReport = async (item: HistoryItem) => {
-    const eventId = item.event_id || item.scan_id;
-    if (!eventId) {
-      notify({ tone: "error", title: "PDF недоступен", description: "Нет event_id для отчёта" });
-      return;
-    }
-    try {
-      const response = await fetch(`${API_BASE}/intelligence/report/${eventId}?format=pdf`);
-      if (!response.ok) throw new Error(await response.text());
-      const blob = await response.blob();
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `reconscope_${eventId}.pdf`;
-      link.click();
-      URL.revokeObjectURL(link.href);
-    } catch (error) {
-      notify({ tone: "error", title: "Ошибка PDF", description: String(error) });
-    }
-  };
-
   const detailValue = detailItem && (detailItem.data ?? detailItem);
   const latestTimestamp = history[0]?.timestamp ?? history[0]?.updated_at;
   const apiDocsUrl = `${API_BASE}/docs`;
@@ -444,6 +391,34 @@ export default function App() {
       defensive,
       offensive,
     };
+  }, [detailItem]);
+
+  const llmFindings = useMemo((): ScanFinding[] => {
+    if (!detailItem) return [];
+
+    const rawData = detailItem.data;
+    const dataObject =
+      rawData && typeof rawData === "object" && !Array.isArray(rawData) ? (rawData as Record<string, unknown>) : undefined;
+    const dataReport =
+      dataObject && "report" in dataObject
+        ? ((dataObject as { report?: LlmReport }).report as LlmReport | undefined)
+        : undefined;
+    const report = detailItem.report ?? dataReport;
+    return Array.isArray(report?.findings) ? report.findings : [];
+  }, [detailItem]);
+
+  const llmTaxonomy = useMemo(() => {
+    if (!detailItem) return undefined;
+
+    const rawData = detailItem.data;
+    const dataObject =
+      rawData && typeof rawData === "object" && !Array.isArray(rawData) ? (rawData as Record<string, unknown>) : undefined;
+    const dataReport =
+      dataObject && "report" in dataObject
+        ? ((dataObject as { report?: LlmReport }).report as LlmReport | undefined)
+        : undefined;
+    const report = detailItem.report ?? dataReport;
+    return report?.metadata?.taxonomy;
   }, [detailItem]);
 
   const handleAuthorize = () => {
@@ -611,9 +586,10 @@ export default function App() {
         item={detailItem}
         content={detailItem && detailValue ? stringify(detailValue) : ""}
         summaryInfo={summaryInfo}
+        findings={llmFindings}
+        taxonomy={llmTaxonomy}
         onClose={() => setDetailItem(null)}
         onDownload={downloadResult}
-        onDownloadPdf={downloadPdfReport}
       />
 
       <ToastStack toastList={toastList} />
