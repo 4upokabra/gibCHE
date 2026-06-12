@@ -84,7 +84,6 @@ export function CommandHub({
   const isInjectionVector =
     isXssExploit || isCommandInjection || isPathTraversal || isSsti || isXxe || isSsrf;
   const scannerOptions = [
-    { key: "nmap", label: "Nmap", icon: Radar },
     { key: "shodan", label: "Shodan", icon: Radio },
     { key: "virustotal", label: "VT", icon: Database },
     { key: "subdomains", label: "Поддомены", icon: MapPin },
@@ -224,12 +223,6 @@ export function CommandHub({
               Доп. параметры
             </summary>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <input
-                className={inputClass}
-                value={reconForm.nmapArgs}
-                onChange={(e) => setReconForm((prev) => ({ ...prev, nmapArgs: e.target.value }))}
-                placeholder="Nmap: -sC -sV --top-ports=100"
-              />
               <input
                 className={inputClass}
                 value={reconForm.shodanQuery}

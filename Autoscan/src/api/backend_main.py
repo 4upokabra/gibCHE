@@ -73,7 +73,7 @@ class TestingProfile(str, Enum):
 
 
 class ScannersConfig(BaseModel):
-    nmap: bool = True
+    nmap: bool = False
     shodan: bool = True
     virustotal: bool = True
     subdomains: bool = True

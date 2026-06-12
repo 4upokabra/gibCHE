@@ -1,7 +1,6 @@
 export type PendingAction = "recon" | "attack" | "llm" | "autopentest" | null;
 
 export type OsintScanners = {
-  nmap: boolean;
   shodan: boolean;
   virustotal: boolean;
   subdomains: boolean;
@@ -18,7 +17,6 @@ export type ReconFormState = {
   comprehensive: boolean;
   useCache: boolean;
   scanners: OsintScanners;
-  nmapArgs: string;
   shodanQuery: string;
   googleDork: string;
   virustotalFlags: string;

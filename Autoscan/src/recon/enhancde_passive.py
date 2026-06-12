@@ -161,7 +161,7 @@ class EnhancedPassiveRecon(IntelligenceProvider):
                 results[key] = value
 
         # --- 3. Nmap (??????????, ??????????) ---
-        if options.scanners.get("nmap", True):
+        if options.scanners.get("nmap", False):
             nmap_args = options.overrides.get("nmap_args")
             if nmap_args:
                 nmap_result = self._run_async(self.nmap.scan_target(target, nmap_args))

@@ -69,7 +69,6 @@ export default function App() {
   const [filters, setFilters] = useState<FilterState>({ search: "", status: "all" });
   const [toastList, setToastList] = useState<Toast[]>([]);
   const defaultScanners = {
-    nmap: true,
     shodan: true,
     virustotal: true,
     subdomains: true,
@@ -86,7 +85,6 @@ export default function App() {
     comprehensive: true,
     useCache: true,
     scanners: defaultScanners,
-    nmapArgs: "",
     shodanQuery: "",
     googleDork: "",
     virustotalFlags: "",
@@ -205,7 +203,6 @@ export default function App() {
         use_cache: reconForm.useCache,
         scanners: reconForm.scanners,
         overrides: {
-          nmap_args: reconForm.nmapArgs || undefined,
           shodan_query: reconForm.shodanQuery || undefined,
           google_dork: reconForm.googleDork || undefined,
           virustotal_flags: reconForm.virustotalFlags || undefined,

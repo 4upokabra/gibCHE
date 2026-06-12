@@ -11,7 +11,7 @@ class ReconOptions:
     profile: str = "quick"  # quick | full
     use_cache: bool = True
     scanners: Dict[str, bool] = field(default_factory=lambda: {
-        "nmap": True,
+        "nmap": False,
         "shodan": True,
         "virustotal": True,
         "subdomains": True,
